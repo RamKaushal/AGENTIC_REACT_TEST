@@ -1,0 +1,159 @@
+@tool
+def get_projected_forecast_distribution_by_weekday_mtd(input: str) -> str:
+    """
+    Projects MTD forecast using last year's same-month weekday-weeknumber distribution
+    (e.g.: last Monday, last Tuesday, etc.).
+    Returns:
+        pd.DataFrame: Columns - Day, Week_Number, Weekday, MTD_Value, Last_Year_Percentage, Final_Adjustment
+    """
+    global model_data,forecast_df,result
+    # Date datetime format
+    # print(daily_data_train.head())
+    daily_data_train = model_data.copy() 
+    forecast = forecast_df.copy()
+    forecast = forecast.iloc[:30]
+    mtd_value = 30000
+    daily_data_train.rename(columns={'REPORT_DT':'Date'},inplace=True)
+    daily_data_train['Date'] = pd.to_datetime(daily_data_train['Date'])
+    forecast['Date'] = pd.to_datetime(forecast['Date'])
+    
+    # Forecast window
+    forecast_start = forecast['Date'].min()
+    forecast_end = forecast['Date'].max()
+    forecast_month = forecast_start.month
+    forecast_year = forecast_start.year
+    # Step 1: Estimate total projected MTD using daily avg
+    day=1
+    first_of_month = forecast_start.replace(day=1)
+    # Count of completed days (*Cannot compute daily average: Forecast starts on the 1st.*)
+    prev_day_mtd_value = mtd_value
+    days_completed = (forecast_start - first_of_month).days + 1
+    per_day_avg_mtd = prev_day_mtd_value / days_completed
+    forecast_days_count = (forecast_end - forecast_start).days + 1
+    projected_total_mtd = prev_day_mtd_value + per_day_avg_mtd * forecast_days_count
+    
+    # Step 2: Extract same month from last year
+    year_last, month_last = forecast_year-1, forecast_month
+    last_year_month_start = pd.Timestamp(year=year_last, month=month_last, day=1)
+    last_year_month_end = last_year_month_start + pd.offsets.MonthEnd()
+    last_year_data = daily_data_train[
+        (daily_data_train['Date'] >= last_year_month_start) &
+        (daily_data_train['Date'] <= last_year_month_end)
+    ].copy()
+    if last_year_data.empty:
+        raise ValueError("No data found for the same month last year.")
+    # Week number and weekday extraction
+    last_year_data['Weekday'] = last_year_data['Date'].dt.day_name()
+    last_year_data['Week_Number'] = last_year_data['Date'].apply(lambda x: (x.day - 1) // 7 + 1)
+    last_year_data['Key'] = last_year_data['Week_Number'].astype(str) + '_' + last_year_data['Weekday']
+    # Calculate distribution and percent share per key
+    dist_group = last_year_data.groupby('Key')['TOTAL_OFFERED_CALL_VOLUME'].sum()
+    dist_total = dist_group.sum()
+    dist_percentage = (dist_group / dist_total).round(6)
+    # Key for forecast days not same key
+    forecast['Weekday'] = forecast['Date'].dt.day_name()
+    forecast['Week_Number'] = forecast['Date'].apply(lambda x: (x.day - 1) // 7 + 1)
+    forecast['Key'] = forecast['Week_Number'].astype(str) + '_' + forecast['Weekday']
+    # Step 4: Map distribution percentage and calculate final adjustment
+    forecast['Last_Year_Percentage'] = forecast['Key'].map(lambda k: dist_percentage.get(k, 0))
+    forecast['Final_Adjustment'] = forecast['Key'].map(lambda k: dist_percentage.get(k, 0) * projected_total_mtd).round(2)
+    forecast['MTD_Value'] = mtd_value
+    forecast.rename(columns={'Forecast': 'Base_Forecast'}, inplace=True)
+    # Prepare output
+    print(forecast)
+    result = forecast[['Date', 'Week_Number', 'Weekday', 'MTD_Value', 'Last_Year_Percentage', 'Base_Forecast', 'Final_Adjustment']].copy()
+    result.rename(columns={'Date': 'Day'}, inplace=True)
+    result = result.reset_index(drop=True)
+    return result
+
+def HIL_PulseCast(user_input: str) -> str:
+  """
+  HUMAN IN THE LOOP
+  """
+  global result,human_input
+  print(f"This is the PulseCast Modified forecast: {result}")
+  human_input = input("Provide Feedback on forecast or Press 'Y' to proceed to next agent")
+  if human_input == 'Y':
+    return "END"
+  else:
+    return "Feedback_node"
+
+def human_feedback_inclusion(input: str):
+  global human_input,forecast_df,result,response
+  print(f"This is the Feeback: {human_input}")
+
+  prompt = f"""
+    You are given the following inputs:
+
+    Original Forecast: {forecast_df}
+
+    MTD-Adjusted Forecast (PulseCast Output): {result}
+
+    Human Feedback: {human_input}
+
+    Your task is to process these inputs and return a structured analysis as follows:
+
+    1. Apply Human Feedback
+    Thought: Interpret the human feedback and understand its intent.
+
+    Reason: Justify why the feedback is valid and how it should influence the MTD-adjusted forecast.
+
+    Action: Modify the MTD-adjusted forecast accordingly based on the feedback.
+
+    2. Provide Final Forecast
+    Output the updated forecast after incorporating the human feedback.
+
+    3. Compare Forecasts
+    Compare the final human-adjusted forecast with the original MTD-adjusted forecast.
+
+    Highlight the key differences, numerical shifts, or directional changes.
+
+    4. Evaluate Human Feedback Usage
+    List the pros and cons of incorporating human feedback versus relying purely on automated MTD-based adjustments.
+
+
+    """
+
+  # Initialize ChatVertexAI with explicit credentials
+  llm = ChatVertexAI(
+      model="gemini-2.5-pro",
+      project="steady-bonsai-467007-g0",
+      location="us-central1",
+      max_output_tokens=65536,
+      temperature=0,
+      credentials=credentials  # ✅ This overrides the default fallback
+  )
+
+  llm.invoke("HI")
+  response = llm.invoke(prompt)
+  response = response.content
+  print(response)
+  return None
+
+
+
+
+tools = [get_projected_forecast_distribution_by_weekday_mtd]
+llm = ChatVertexAI(
+    model="gemini-2.5-pro",
+    project="steady-bonsai-467007-g0",
+    location="us-central1",
+    max_output_tokens=2048,
+    temperature=0,
+    credentials=credentials
+)
+bound_llm = llm.bind_tools(tools)
+
+agent_node = create_react_agent(bound_llm, tools=tools, state_schema=AgentState )
+graph = StateGraph(AgentState)
+graph.add_node("agent", agent_node)
+graph.add_node("human_feedback_inclusion_node", human_feedback_inclusion)
+graph.set_entry_point("agent")
+graph.add_conditional_edges("agent",HIL_PulseCast,{"END":END,"Feedback_node":"human_feedback_inclusion_node"})
+graph.add_edge("human_feedback_inclusion_node",END)
+
+
+
+runnable = graph.compile()
+prompt = "Project MTD forecast using last year's same-month weekday-weeknumber distribution 'model_data' "
+output = runnable.invoke({"messages": [{"role": "user", "content": prompt}]})
