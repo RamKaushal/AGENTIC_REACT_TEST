@@ -453,12 +453,16 @@ def Agentic_AI_F():
     prompt = "identify the holidays present in 'forecast_df' and thenEvaluate the actual impact of holidays on call volume and finally  Performs a final adjustment on the holiday-forecasted call volumes"
     output = runnable.invoke({"messages": [{"role": "user", "content": prompt}]})
 
+    prompt1 = "Performs a final adjustment on the holiday-forecasted call volumes on 'model_df'"
+    output1 = runnable.invoke({"messages": [{"role": "user", "content": prompt1}]})
+
+
 
     st.title("🤖 AGENT FestivCast")
     full_output = ""
 
     # Loop over all output blocks
-    for output_block in [output]:
+    for output_block in [output,output1]:
         for msg in output_block["messages"]:
             name = getattr(msg, "name", None)
             if name is None:
