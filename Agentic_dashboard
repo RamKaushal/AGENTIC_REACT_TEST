@@ -1,0 +1,349 @@
+# Write the improved Streamlit app to a file for the user to download
+app_code = r'''
+import streamlit as st
+import pandas as pd
+import numpy as np
+from datetime import date, timedelta, datetime
+
+# =========================
+# Page Setup (Citi-inspired)
+# =========================
+st.set_page_config(
+    page_title="Agentic Nexus — Citi",
+    page_icon="💼",
+    layout="wide",
+    initial_sidebar_state="expanded",
+)
+
+# ---- Branding / Theme (Citi-inspired, no external fonts) ----
+st.markdown(
+    """
+    <style>
+    :root {
+        --citi-blue:#004C97;
+        --citi-blue-2:#0A66B2;
+        --citi-accent:#E1251B;
+        --bg:#0B1020;
+        --bg-2:#0E1730;
+        --text:#E9F1FA;
+        --muted:#A8C3DA;
+        --panel:#0F1A33;
+        --ring:#1F5EA8;
+    }
+    html, body, [data-testid="stAppViewContainer"] {
+        background-color: var(--bg);
+        color: var(--text);
+    }
+    [data-testid="stSidebar"] {
+        background: linear-gradient(180deg, var(--citi-blue), var(--bg-2));
+        color: var(--text);
+        border-right: 1px solid rgba(233,241,250,.08);
+    }
+    .title-hero {
+        background: linear-gradient(90deg, rgba(0,76,151,.35), rgba(31,94,168,.15));
+        border: 1px solid rgba(233,241,250,.08);
+        border-radius: 16px;
+        padding: 18px 22px;
+        margin-bottom: 12px;
+    }
+    .pill {
+        display:inline-block;
+        padding:6px 10px;
+        border-radius:9999px;
+        border:1px solid rgba(233,241,250,.12);
+        background:rgba(15,26,51,.5);
+        margin-right:6px;
+        font-size:12px;
+        color:var(--muted);
+    }
+    .card {
+        background: var(--panel);
+        border: 1px solid rgba(233,241,250,.08);
+        border-radius: 16px;
+        padding: 14px 16px;
+    }
+    .card:hover { border-color: rgba(225,37,27,.35); }
+    .kpi {
+        font-size: 26px; font-weight: 700; color: #fff;
+    }
+    .kpi-sub { font-size: 12px; color: var(--muted); }
+    .btn-primary button {
+        background: var(--citi-blue-2) !important;
+        color: white !important;
+        border: 0 !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 0 1px rgba(255,255,255,.08) inset !important;
+    }
+    .btn-primary button:hover {
+        filter: brightness(1.1);
+    }
+    .ok { color:#20C997; }
+    .warn { color:#FFC107; }
+    .alert { color: var(--citi-accent); }
+    .chatbox {
+        background: var(--panel);
+        border: 1px solid rgba(233,241,250,.08);
+        border-radius: 14px;
+        padding: 12px 14px;
+    }
+    hr { border-top: 1px solid rgba(233,241,250,.08); }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+# =========
+# Utilities
+# =========
+@st.cache_data(show_spinner=False)
+def get_mock_ct_data(n_days: int = 30, seed: int = 42) -> pd.DataFrame:
+    """Mock Costco CT call-volume data (PII-safe)."""
+    rng = np.random.default_rng(seed)
+    today = date.today()
+    dates = pd.date_range(end=today, periods=n_days, freq="D")
+    ct_ids = ["CT-123", "CT-456", "CT-789"]
+    agents = ["Kaushal", "Alex", "John"]
+    rows = []
+    for d in dates:
+        for ct in ct_ids:
+            base = rng.integers(10000, 20001)
+            noise = rng.normal(0, 900)
+            volume = max(0, int(base + noise))
+            mape = max(0, min(100, rng.normal(18 if ct=="CT-123" else 12, 6)))
+            rows.append((d.date(), ct, rng.choice(agents), volume, round(mape, 2)))
+    df = pd.DataFrame(rows, columns=["Date", "CT_ID", "Agent", "Call_Volume", "MAPE"])
+    return df
+
+def mask_pii(text: str) -> str:
+    """Very simple PII masking demo (extend with org policy)."""
+    if not text:
+        return text
+    return text.replace("@", " at ").replace(".", " dot ")
+
+def llm_stub(prompt: str) -> str:
+    """Stub for LLM response. Replace with internal gateway (e.g., Gemini)."""
+    # NOTE: Ensure prompts are logged & sanitized per policy before sending to any vendor LLM.
+    return (
+        "Analyzed latest Costco CT telemetry. "
+        "CT-123 shows elevated MAPE primarily from a phishing-driven contact spike last Friday (03:14). "
+        "Recommend: flag campaign, enable targeted IVR deflection, and push advisory banner to Citi Online."
+    )
+
+# =====================
+# Session State Init
+# =====================
+if "chat" not in st.session_state:
+    st.session_state.chat = []  # list of dicts: {"role": "user"/"assistant", "content": str, "ts": datetime}
+if "filters" not in st.session_state:
+    st.session_state.filters = {
+        "date_from": date.today() - timedelta(days=6),
+        "date_to": date.today(),
+        "cts": ["CT-123"],
+        "agent": "Kaushal",
+        "mask_pii": True,
+    }
+
+# =======
+# Sidebar
+# =======
+st.sidebar.header("🧰 Controls & Filters")
+df_all = get_mock_ct_data(45)
+
+# Date range (default last 7 days)
+d1, d2 = st.sidebar.date_input(
+    "📅 Date range",
+    value=(st.session_state.filters["date_from"], st.session_state.filters["date_to"]),
+    min_value=df_all["Date"].min(),
+    max_value=df_all["Date"].max(),
+)
+cts = st.sidebar.multiselect("🏷️ CT Selection", sorted(df_all["CT_ID"].unique()), default=st.session_state.filters["cts"])
+agent = st.sidebar.selectbox("🧍 Agent", ["All"] + sorted(df_all["Agent"].unique()), index=1)
+mask_pii_opt = st.sidebar.toggle("🔒 Mask PII in UI", value=st.session_state.filters["mask_pii"], help="Hide potentially sensitive tokens in chat/output.")
+
+col_sb1, col_sb2 = st.sidebar.columns(2)
+with col_sb1:
+    apply = st.button("⚡ Apply", type="primary")
+with col_sb2:
+    reset = st.button("↺ Reset")
+
+if apply:
+    st.session_state.filters.update(
+        {"date_from": d1, "date_to": d2, "cts": cts or sorted(df_all['CT_ID'].unique()), "agent": agent, "mask_pii": mask_pii_opt}
+    )
+    st.toast("Filters applied.", icon="✅")
+
+if reset:
+    st.session_state.filters = {
+        "date_from": date.today() - timedelta(days=6),
+        "date_to": date.today(),
+        "cts": ["CT-123"],
+        "agent": "Kaushal",
+        "mask_pii": True,
+    }
+    st.toast("Filters reset.", icon="🔄")
+
+# Filter data
+f = st.session_state.filters
+mask = (
+    (df_all["Date"] >= f["date_from"]) &
+    (df_all["Date"] <= f["date_to"]) &
+    (df_all["CT_ID"].isin(f["cts"])) &
+    ((df_all["Agent"] == f["agent"]) if f["agent"] != "All" else True)
+)
+df = df_all.loc[mask].copy()
+
+# ======
+# Header
+# ======
+with st.container():
+    st.markdown(
+        f"""
+        <div class="title-hero">
+            <h2 style="margin:0">👋 Hello Agent, Good morning</h2>
+            <div style="margin-top:6px">
+                <span class="pill">Environment: <b>INTERNAL</b></span>
+                <span class="pill">Data: <b>PII-SAFE MOCK</b></span>
+                <span class="pill">Compliance: <b>UI Only</b></span>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+# ======
+# KPIs
+# ======
+k1, k2, k3, k4 = st.columns(4)
+with k1:
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown('<div class="kpi">📞 {:,}</div>'.format(int(df["Call_Volume"].sum())) , unsafe_allow_html=True)
+    st.markdown('<div class="kpi-sub">Total Calls in Range</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with k2:
+    avg_mape = df["MAPE"].mean() if not df.empty else 0.0
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi">📉 {avg_mape:.1f}%</div>', unsafe_allow_html=True)
+    st.markdown('<div class="kpi-sub">Average MAPE</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with k3:
+    high_mape_cts = df.groupby("CT_ID")["MAPE"].mean().sort_values(ascending=False).head(1)
+    top_ct_label = high_mape_cts.index[0] if len(high_mape_cts) else "--"
+    top_ct_val = high_mape_cts.iloc[0] if len(high_mape_cts) else 0.0
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi">🚩 {top_ct_label} ({top_ct_val:.1f}%)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="kpi-sub">Highest MAPE CT</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+with k4:
+    days = (f["date_to"] - f["date_from"]).days + 1
+    st.markdown('<div class="card">', unsafe_allow_html=True)
+    st.markdown(f'<div class="kpi">🗓️ {days}d</div>', unsafe_allow_html=True)
+    st.markdown('<div class="kpi-sub">Window Length</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+
+st.divider()
+
+# ===============================
+# Two Columns: Alerts & Control
+# ===============================
+left, right = st.columns([1, 1])
+
+with left:
+    st.subheader("🔥 High MAPE CT Alerts")
+    alert_box = st.container(border=True)
+    with alert_box:
+        # Derive alerts
+        if df.empty:
+            st.info("No alerts in the selected range.", icon="ℹ️")
+        else:
+            agg = df.groupby("CT_ID")["MAPE"].mean().sort_values(ascending=False)
+            for ct, m in agg.items():
+                level = "alert" if m >= 35 else "warn" if m >= 25 else "ok"
+                desc = "Potential fraud pattern" if m >= 35 else "Irregular surge" if m >= 25 else "Nominal variability"
+                st.markdown(f"- <span class='{level}'><b>{ct}</b></span>: MAPE {m:.1f}% — {desc}", unsafe_allow_html=True)
+
+        c1, c2 = st.columns([1,1])
+        with c1:
+            st.button("🔎 Full Diagnostics", key="diag", help="Open diagnostic workflow", type="secondary")
+        with c2:
+            st.button("🧯 Raise Incident", key="inc", help="Escalate to Fraud Ops", type="secondary")
+
+with right:
+    st.subheader("✅ Mission Control Panel")
+    mc = st.container()
+    with mc:
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            st.button("📈 Short-term Forecast", key="short", help="7–14 day horizon", type="primary")
+            st.button("🧠 Historical Analysis", key="hist", help="Drill into patterns", type="primary")
+        with cc2:
+            st.button("📊 Long-term Forecast", key="long", help="60–90 day horizon", type="primary")
+            st.button("🛠️ Command Center", key="cmd", help="Playbooks & actions", type="primary")
+
+    st.caption("Note: Buttons are placeholders; wire to your internal services.")
+
+st.divider()
+
+# ============
+# Data Preview
+# ============
+st.subheader("🗂️ Filtered Data Snapshot")
+st.dataframe(df.sort_values(["Date", "CT_ID"]), use_container_width=True, height=260)
+
+# ============
+# Chat Section
+# ============
+st.subheader("💬 Engage With Agentic LLM")
+
+st.markdown(
+    """
+    <small>
+    Guidance: Keep queries free of PII. Conversations are retained in this session for audit visibility.
+    </small>
+    """,
+    unsafe_allow_html=True,
+)
+
+# Render chat history
+for m in st.session_state.chat:
+    with st.chat_message(m["role"]):
+        content = mask_pii(m["content"]) if st.session_state.filters["mask_pii"] else m["content"]
+        st.write(content)
+
+if user_msg := st.chat_input("Type your command… (e.g., 'Why is CT-123 MAPE high?')"):
+    st.session_state.chat.append({"role": "user", "content": user_msg, "ts": datetime.now().isoformat()})
+    with st.chat_message("user"):
+        st.write(mask_pii(user_msg) if st.session_state.filters["mask_pii"] else user_msg)
+
+    with st.chat_message("assistant"):
+        with st.spinner("Analyzing securely…"):
+            reply = llm_stub(user_msg)
+        if st.session_state.filters["mask_pii"]:
+            reply = mask_pii(reply)
+        st.success("🔍 " + reply)
+        st.session_state.chat.append({"role": "assistant", "content": reply, "ts": datetime.now().isoformat()})
+
+st.divider()
+
+# ===========
+# Audit Trail
+# ===========
+st.subheader("🧾 Session Audit Trail")
+audit_df = pd.DataFrame([
+    {"Time": m["ts"], "Actor": m["role"], "Event": "Chat message", "Summary": (m["content"][:80] + ("…" if len(m["content"])>80 else ""))}
+    for m in st.session_state.chat
+])
+st.dataframe(audit_df, use_container_width=True, height=170)
+
+# =======
+# Footer
+# =======
+st.markdown("---")
+st.caption("For internal demo only • Citi-inspired theme • No real customer data • Integrate with your enterprise auth, logging, and model gateway before production.")
+'''
+with open('/content/sample_data/future.py', 'w', encoding='utf-8') as f:
+    f.write(app_code)
+
+# print("Saved to /mnt/data/agentic_nexus.py")
