@@ -344,6 +344,148 @@ def dual_line_chart(df,title):
         color=alt.Color("Series:N", scale=color_scale), strokeDash=stroke_dash,
         tooltip=[alt.Tooltip("t:T", title="Time"), "Series:N", alt.Tooltip("Value:Q", title="Value", format=".2f")]
     ).properties(height=220, title=title)
+import streamlit as st
+import pandas as pd
+import calendar
+from datetime import date, datetime
+import holidays
+
+def render_holiday_calendar(
+    start_date,
+    end_date,
+    country: str = "IN",
+    firstweekday: int = 0,     # 0=Monday, 6=Sunday
+    show_legend: bool = True,
+    show_holiday_list: bool = True,
+    title: str | None = None   # e.g., '<div class="bubble system captionline">CALENDAR</div>'
+):
+    """
+    Render calendars for all months between start_date and end_date (inclusive),
+    highlighting public holidays, weekends, and today.
+
+    Parameters
+    ----------
+    start_date : date | str
+        Range start (date object or 'YYYY-MM-DD').
+    end_date   : date | str
+        Range end (date object or 'YYYY-MM-DD').
+    country    : str
+        ISO 3166-1 alpha-2 country code for the `holidays` package (e.g., 'IN', 'US').
+    firstweekday : int
+        0=Monday ... 6=Sunday for the calendar layout.
+    show_legend : bool
+        Show a small legend under each month.
+    show_holiday_list : bool
+        Show an expandable list of holidays that fall within the range.
+    title : str | None
+        Optional HTML string to render as a heading (lets you reuse your .bubble CSS).
+    """
+
+    # --- normalize inputs ---
+    def to_date(d):
+        if isinstance(d, date):
+            return d
+        if isinstance(d, str):
+            return datetime.strptime(d, "%Y-%m-%d").date()
+        raise TypeError("start_date/end_date must be date or 'YYYY-MM-DD' string")
+
+    start_date = to_date(start_date)
+    end_date = to_date(end_date)
+
+    if start_date > end_date:
+        st.warning("Start date is after end date. Please adjust the range.")
+        return
+
+    if title:
+        st.markdown(title, unsafe_allow_html=True)
+
+    # Month boundaries
+    start_month = date(start_date.year, start_date.month, 1)
+    end_month = date(end_date.year, end_date.month, 1)
+
+    # Gather years to fetch holidays once
+    years = list(range(start_month.year, end_month.year + 1))
+
+    # Get holidays for the span
+    try:
+        hol = holidays.country_holidays(country, years=years)
+    except Exception:
+        # Compatibility fallback for older `holidays` versions
+        country_cls = getattr(holidays, country, None)
+        hol = country_cls(years=years) if country_cls else holidays.HolidayBase()
+
+    # Only keep holiday dates inside the exact range
+    holiday_dates = {d for d in hol if start_date <= d <= end_date}
+    holiday_names = {d: hol[d] for d in holiday_dates}
+
+    cal = calendar.Calendar(firstweekday=firstweekday)
+    today = date.today()
+
+    # Iterate months in the range
+    cur_year, cur_month = start_month.year, start_month.month
+    while (cur_year, cur_month) <= (end_month.year, end_month.month):
+        weeks = cal.monthdayscalendar(cur_year, cur_month)  # 0 for padding cells
+        # Mask out days outside [start_date, end_date] (so partial months look clean)
+        masked_weeks = []
+        for w in weeks:
+            row = []
+            for d in w:
+                if d == 0:
+                    row.append("")
+                else:
+                    the_day = date(cur_year, cur_month, d)
+                    if not (start_date <= the_day <= end_date):
+                        row.append("")  # hide out-of-range days
+                    else:
+                        row.append(d)
+            masked_weeks.append(row)
+
+        df = pd.DataFrame(masked_weeks, columns=list(calendar.day_abbr)).replace(0, "")
+
+        # --- formatting and styling ---
+        def fmt_cell(v):
+            if v == "" or v is None:
+                return ""
+            d = date(cur_year, cur_month, int(v))
+            return f"{v} ★" if d in holiday_dates else f"{v}"
+
+        def style_cell(v):
+            if v == "" or v is None:
+                return ""
+            # Value might be "15" or "15 ★" -> extract the number
+            try:
+                day_num = int(str(v).split()[0])
+            except Exception:
+                return ""
+            d = date(cur_year, cur_month, day_num)
+            css = []
+
+            # holidays
+            if d in holiday_dates:
+                css.append("background-color:rgba(253, 224, 71, 0.15); border:1px solid rgba(253, 224, 71, 0.45);")
+            # nice padding/centering
+            css.append("text-align:center; padding:6px; border-radius:8px;")
+            return "".join(css)
+
+        styled = df.style.format(fmt_cell).applymap(style_cell)
+
+        # --- render month ---
+        st.subheader(f"{calendar.month_name[cur_month]} {cur_year}")
+        st.table(styled)
+        if show_legend:
+            st.caption("★ holiday   ·   weekends shaded   ·   today outlined")
+
+        # next month
+        if cur_month == 12:
+            cur_month, cur_year = 1, cur_year + 1
+        else:
+            cur_month += 1
+
+    # Holiday list for the whole range
+    if show_holiday_list and holiday_names:
+        with st.expander("Holiday list in range"):
+            for d, name in sorted(holiday_names.items()):
+                st.write(f"{d:%a, %b %d, %Y}: {name}")
 
 def row(): return st.container()
 
@@ -408,7 +550,7 @@ if st.session_state["show_week"]:
             if st.session_state["started"]:
                 # Interactive calendar + trend
                 t = date.today(); a=t.replace(day=1); b=(a.replace(day=28)+timedelta(days=10)).replace(day=1)-timedelta(days=1)
-                st.date_input("Select date or range", value=(a,b))
+                start_date, end_date = st.date_input("Select date or range", value=(a,b))
 
 
 # ---------- ROW 4: Base Forecast (only after Row3 right is visible) ----------
@@ -427,6 +569,10 @@ if st.session_state["started"]:
             if st.session_state["base_ran"]:
                 st.markdown('<div class="bubble system captionline">BASE FORECAST TABLE</div>', unsafe_allow_html=True)
                 st.dataframe(spec_base_df, use_container_width=True)
+                st.markdown('<div class="bubble captionline">Events: There is a marketing event that is present for this as per the Outlook email</div>', unsafe_allow_html=True)
+                render_holiday_calendar(start_date, end_date, country="US", firstweekday=0, title=None)
+                
+		
 
 # ---------- ROW 5: Festivalcast (only after Row4 right is visible) ----------
 if st.session_state["base_ran"]:
@@ -467,6 +613,34 @@ if st.session_state["festival_ran"]:
                 st.markdown('<div class="bubble system captionline">FINAL FORECAST</div>', unsafe_allow_html=True)
                 df_show = st.session_state["human_adj_df"] if st.session_state["human_adj_df"] is not None else spec_human_df
                 st.dataframe(df_show, use_container_width=True)
+                available_series = ["Base", "Festive"] + (["Human-adj Forecast"] if "Human-adj Forecast" in df_show.columns else [])
+                default_selection = available_series  # show everything available by default
+                selection = st.multiselect("Series to display", available_series, default_selection)
+
+                # --- Build Plotly figure ---
+                fig = go.Figure()
+                for col in selection:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df_show["Date"],
+                            y=df_show[col],
+                            mode="lines+markers",
+                            name=col,
+                            hovertemplate="<b>%{fullData.name}</b><br>Date=%{x|%Y-%m-%d}<br>Value=%{y:.2f}<extra></extra>",
+                        )
+                    )
+
+                fig.update_layout(
+                    margin=dict(l=20, r=20, t=30, b=20),
+                    xaxis_title="Date",
+                    yaxis_title="Value",
+                    xaxis=dict(rangeslider=dict(visible=True), type="date"),
+                    template="plotly_white",
+                    legend_title_text="Series",
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
+
 
 # ---------- ROW 7: Seasoncast Trigger (only after Row6 right is visible) ----------
 can_go_season = (st.session_state["base_approved"] is True) or st.session_state["base_human_confirmed"]
