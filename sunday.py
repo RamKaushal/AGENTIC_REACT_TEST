@@ -613,7 +613,7 @@ if st.session_state["festival_ran"]:
                 st.markdown('<div class="bubble system captionline">FINAL FORECAST</div>', unsafe_allow_html=True)
                 df_show = st.session_state["human_adj_df"] if st.session_state["human_adj_df"] is not None else spec_human_df
                 st.dataframe(df_show, use_container_width=True)
-                available_series = ["Base", "Festive"] + (["Human-adj Forecast"] if "Human-adj Forecast" in df_show.columns else [])
+                available_series = ["Base", "Festive"] + (["Human-Adj Forecast"] if "Human-Adj Forecast" in df_show.columns else [])
                 default_selection = available_series  # show everything available by default
                 selection = st.multiselect("Series to display", available_series, default_selection)
 
