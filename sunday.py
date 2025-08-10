@@ -656,7 +656,6 @@ if can_go_season:
         with rcol:
             if st.session_state["season_ran"]:
                 st.markdown('<div class="bubble system captionline">ADJUSTED (SEASON) TABLE</div>', unsafe_allow_html=True)
-                st.markdown('<div class="stepchip"><div class="dot-warn"></div> Warning: fraud signal noted; trend may change</div>', unsafe_allow_html=True)
                 st.dataframe(
                     st.session_state.get("season_raw_df", spec_season_df),  # <-- raw, like fest row
                     use_container_width=True
@@ -682,6 +681,33 @@ if st.session_state["season_ran"]:
         with rcol:
             if (st.session_state["season_approved"] is True) or st.session_state["season_confirmed"]:
                 st.dataframe(st.session_state["season_df"] if st.session_state["season_df"] is not None else spec_season_df, use_container_width=True)
+                available_series = ["Date", "Seasoncast Adjusted Forecast"] + (["Human-Adj Forecast"] if "Human-Adj Forecast" in df_show.columns else [])
+                default_selection = available_series  # show everything available by default
+                selection = st.multiselect("Series to display", available_series, default_selection)
+
+                # --- Build Plotly figure ---
+                fig = go.Figure()
+                for col in selection:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=st.session_state["season_df"]["Date"],
+                            y=st.session_state["season_df"][col],
+                            mode="lines+markers",
+                            name=col,
+                            hovertemplate="<b>%{fullData.name}</b><br>Date=%{x|%Y-%m-%d}<br>Value=%{y:.2f}<extra></extra>",
+                        )
+                    )
+
+                fig.update_layout(
+                    margin=dict(l=20, r=20, t=30, b=20),
+                    xaxis_title="Date",
+                    yaxis_title="Value",
+                    xaxis=dict(rangeslider=dict(visible=True), type="date"),
+                    template="plotly_white",
+                    legend_title_text="Series",
+                )
+
+                st.plotly_chart(fig, use_container_width=True)
 
 # ---------- ROW 9: Pulsecast Trigger (only after Row8 right is visible) ----------
 can_go_pulse = (st.session_state["season_approved"] is True) or st.session_state["season_confirmed"]
