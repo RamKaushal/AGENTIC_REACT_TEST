@@ -83,7 +83,7 @@ def init_state():
         "festival_ran":False,                             # step 5
         "base_approved":None, "base_human_confirmed":False, "human_adj_df":None,  # step 6
         "season_ran":False,                               # step 7
-        "season_approved":None, "season_confirmed":False, "season_df":None,       # step 8
+        "season_approved":None, "season_confirmed":False, "season_df":None,"season_raw_df": None,       # step 8
         "pulse_ran":False,                                # step 9
         "pulse_approved":None, "pulse_confirmed":False, "pulse_df":None,          # step10
         "add_info_done":False, "add_info_text":"",        # step11
@@ -651,11 +651,16 @@ if can_go_season:
             st.markdown('<div class="bubble">7) Seasoncast is triggered</div>', unsafe_allow_html=True)
             if st.button("Run Seasoncast 📈", key="run_season"):
                 st.session_state["season_ran"]=True; st.session_state["season_approved"]=None; st.session_state["season_confirmed"]=False
+                st.session_state["season_raw_df"] = spec_season_df.copy()   # <-- raw snapshot
+                st.session_state["season_df"] = spec_season_df.copy()  
         with rcol:
             if st.session_state["season_ran"]:
-                st.markdown('<div class="bubble system captionline">SEASONCAST INSIGHTS</div>', unsafe_allow_html=True)
+                st.markdown('<div class="bubble system captionline">ADJUSTED (SEASON) TABLE</div>', unsafe_allow_html=True)
                 st.markdown('<div class="stepchip"><div class="dot-warn"></div> Warning: fraud signal noted; trend may change</div>', unsafe_allow_html=True)
-
+                st.dataframe(
+                    st.session_state.get("season_raw_df", spec_season_df),  # <-- raw, like fest row
+                    use_container_width=True
+                )
 # ---------- ROW 8: Approve Season (only after Row7 right is visible) ----------
 if st.session_state["season_ran"]:
     with row():
