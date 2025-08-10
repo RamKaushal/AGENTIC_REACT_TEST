@@ -408,14 +408,8 @@ if st.session_state["show_week"]:
             if st.session_state["started"]:
                 # Interactive calendar + trend
                 t = date.today(); a=t.replace(day=1); b=(a.replace(day=28)+timedelta(days=10)).replace(day=1)-timedelta(days=1)
-                st.markdown('<div class="bubble system captionline">CALENDAR — Interactive (Holidays listed)</div>', unsafe_allow_html=True)
                 st.date_input("Select date or range", value=(a,b))
-                st.markdown('<div class="bubble system captionline">SEASONALITY TRENDS (Last 6 Weeks)</div>', unsafe_allow_html=True)
-                rng=np.random.default_rng(42); trend=np.cumsum(rng.normal(0,8,42))+1000
-                trend_df=pd.DataFrame({"t":pd.date_range(end=pd.Timestamp.today(), periods=len(trend)),"value":trend})
-                st.line_chart(trend_df.set_index("t"))
-                st.markdown('<div class="bubble captionline">I’m thinking about holidays present in the range…</div>', unsafe_allow_html=True)
-                st.markdown('<div class="bubble captionline">I’m thinking about seasonality before holidays… (last 6 weeks data consistent)</div>', unsafe_allow_html=True)
+
 
 # ---------- ROW 4: Base Forecast (only after Row3 right is visible) ----------
 if st.session_state["started"]:
