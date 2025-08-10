@@ -7,6 +7,7 @@ import numpy as np
 from datetime import date, timedelta
 import altair as alt
 import time
+import plotly.graph_objects as go
 
 st.set_page_config(page_title="Forecast Command Centre — CitiSphere", layout="wide", initial_sidebar_state="collapsed")
 
@@ -112,10 +113,224 @@ def learn_weights(A,y):
     except Exception: return None
 
 # Charts
+
+def volume_fig(df, title="Yesterday — Volume (Actual vs Forecast)"):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df["Time"], y=df["Forecast Volume"], name="Forecast Volume",
+        mode="lines", line=dict(width=3, dash="dash"),
+        hovertemplate="Time: %{x|%H:%M}<br>Forecast: %{y:,}<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df["Time"], y=df["Actual Volume"], name="Actual Volume",
+        mode="lines+markers", line=dict(width=3),
+        hovertemplate="Time: %{x|%H:%M}<br>Actual: %{y:,}<extra></extra>"
+    ))
+    fig.update_layout(
+        title=title, template="plotly_white", hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=40, r=20, t=60, b=40),
+        xaxis=dict(title=None, tickformat="%H:%M", dtick=7_200_000),  # 2 hours in ms
+        yaxis=dict(title="Volume", tickformat=",d")
+    )
+    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor")
+    fig.update_yaxes(showspikes=True, spikemode="across")
+    return fig
+
+def aht_fig(df, title="Yesterday — AHT (Actual vs Forecast)"):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df["Time"], y=df["Forecast AHT"], name="Forecast AHT",
+        mode="lines", line=dict(width=3, dash="dash"),
+        hovertemplate="Time: %{x|%H:%M}<br>Forecast AHT: %{y}<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df["Time"], y=df["Actual AHT"], name="Actual AHT",
+        mode="lines+markers", line=dict(width=3),
+        hovertemplate="Time: %{x|%H:%M}<br>Actual AHT: %{y}<extra></extra>"
+    ))
+    fig.update_layout(
+        title=title, template="plotly_white", hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=40, r=20, t=60, b=40),
+        xaxis=dict(title=None, tickformat="%H:%M", dtick=7_200_000),  # 2 hours
+        yaxis=dict(title="AHT (seconds)")
+    )
+    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor")
+    fig.update_yaxes(showspikes=True, spikemode="across")
+    return fig
 def yesterday_series():
-    yday=date.today()-timedelta(days=1); hours=pd.date_range(pd.Timestamp(yday), periods=24, freq="H")
-    base=np.linspace(1000,1200,24); rng=np.random.default_rng(3); noise=rng.normal(0,15,24)
-    return pd.DataFrame({"t":hours,"Forecast":base,"Actual":base+noise})
+    import numpy as np
+    import pandas as pd
+    from datetime import date, timedelta
+
+    # Time: yesterday, 30-min intervals (48 rows)
+    yday = date.today() - timedelta(days=1)
+    times = pd.date_range(pd.Timestamp(yday), periods=48, freq="30min")
+
+    rng = np.random.default_rng(42)
+
+    # Smooth daily shape to vary volume through the day
+    x = np.linspace(0, 2*np.pi, 48, endpoint=False)
+    shape = np.sin(x - np.pi/2) + 0.3*np.sin(2*x) + 1.3
+    shape = (shape - shape.min()) / (shape.max() - shape.min())  # normalize 0..1
+
+    # Volume in 19k..30k (forecast + noisy actual)
+    v_min, v_max = 19_000, 30_000
+    forecast_vol = v_min + (v_max - v_min) * shape
+    vol_noise = rng.normal(0, (v_max - v_min) * 0.03, size=48)   # ~3% noise
+    actual_vol = np.clip(forecast_vol + vol_noise, v_min, v_max)
+
+    # AHT in 450..500 (slight inverse relation to volume + small noise)
+    aht_base = 475 + 10*np.cos(x)                                # ~465..485
+    aht_noise_f = rng.normal(0, 2.0, size=48)                    # tiny forecast jitter
+    aht_noise_a = rng.normal(0, 4.0, size=48)                    # slightly larger actual jitter
+    forecast_aht = np.clip(aht_base + aht_noise_f, 450, 500)
+    actual_aht   = np.clip(aht_base + aht_noise_a, 450, 500)
+
+    # SLA (%) ~60..90, lower when load/AHT are higher
+    aht_norm = (actual_aht - 450) / 50.0                         # normalize AHT 0..1
+    sla_noise = rng.normal(0.0, 0.02, size=48)                   # ~±2 percentage points
+    sla = 0.90 - 0.15*shape - 0.10*aht_norm + sla_noise
+    sla = np.clip(sla, 0.60, 0.90)
+    sla_percent = np.round(sla * 100, 1)
+
+    return pd.DataFrame({
+        "Time": times,
+        "Actual Volume": np.rint(actual_vol).astype(int),
+        "Actual AHT": np.rint(actual_aht).astype(int),
+        "Forecast Volume": np.rint(forecast_vol).astype(int),
+        "Forecast AHT": np.rint(forecast_aht).astype(int),
+        "SLA": sla_percent,   # percent, e.g., 83.2
+    })
+
+########
+import numpy as np
+import pandas as pd
+from datetime import date, timedelta
+import plotly.graph_objects as go
+
+def yesterday_series_2(n_days=7, seed=42):
+    """
+    Build last n_days (ending yesterday) at DAILY level.
+    Columns: Date, Actual Volume, Forecast Volume, Actual AHT, Forecast AHT, SLA
+    AHT & SLA are volume-weighted from 30-min intraday simulation.
+    """
+    rng = np.random.default_rng(seed)
+
+    # 30-min timeline across last n_days (ending yesterday)
+    start = date.today() - timedelta(days=n_days)
+    end   = date.today() - timedelta(days=1)
+    times = pd.date_range(pd.Timestamp(start),
+                          pd.Timestamp(end) + pd.Timedelta(hours=23, minutes=30),
+                          freq="30min")
+
+    # Intraday shape reused each day
+    x = np.linspace(0, 2*np.pi, 48, endpoint=False)
+    shape = np.sin(x - np.pi/2) + 0.3*np.sin(2*x) + 1.3
+    shape = (shape - shape.min()) / (shape.max() - shape.min())
+    shape = np.tile(shape, len(pd.date_range(start, end, freq="D")))
+
+    # Day-level variation
+    n_days_exact = len(pd.date_range(start, end, freq="D"))
+    day_scale = rng.normal(1.0, 0.06, size=n_days_exact)   # volume swing per day
+    aht_shift = rng.normal(0.0, 6.0, size=n_days_exact)    # AHT shift per day (sec)
+    day_scale_48 = np.repeat(day_scale, 48)
+    aht_shift_48 = np.repeat(aht_shift, 48)
+
+    # Volume per 30-min
+    v_min, v_max = 19_000, 30_000
+    base_vol = v_min + (v_max - v_min) * shape
+    forecast_vol = base_vol * day_scale_48
+    vol_noise = rng.normal(0, (v_max - v_min) * 0.03, size=forecast_vol.size)
+    actual_vol = np.clip(forecast_vol + vol_noise, v_min, v_max)
+
+    # AHT per 30-min
+    aht_base = 475 + 10*np.cos(np.tile(x, n_days_exact)) + aht_shift_48
+    aht_noise_f = rng.normal(0, 2.0, size=aht_base.size)
+    aht_noise_a = rng.normal(0, 4.0, size=aht_base.size)
+    forecast_aht = np.clip(aht_base + aht_noise_f, 450, 500)
+    actual_aht   = np.clip(aht_base + aht_noise_a, 450, 500)
+
+    # SLA per 30-min (percentage), lower when load/AHT higher
+    load_norm = (base_vol - v_min) / (v_max - v_min)
+    aht_norm = (actual_aht - 450) / 50.0
+    sla = 0.90 - 0.15*load_norm - 0.10*aht_norm + rng.normal(0.0, 0.02, size=aht_base.size)
+    sla = np.clip(sla, 0.60, 0.90) * 100.0
+
+    # 30-min DF
+    df_30 = pd.DataFrame({
+        "Time": times,
+        "Actual Volume": np.rint(actual_vol).astype(int),
+        "Forecast Volume": np.rint(forecast_vol).astype(int),
+        "Actual AHT": np.rint(actual_aht).astype(int),
+        "Forecast AHT": np.rint(forecast_aht).astype(int),
+        "SLA": np.round(sla, 1)
+    })
+
+    # Aggregate to daily (volume-weighted AHT & SLA)
+    def wavg(series, weights):
+        wsum = weights.sum()
+        return float((series * weights).sum() / wsum) if wsum else float("nan")
+
+    g = df_30.set_index("Time").resample("D")
+    df_day = g.apply(lambda x: pd.Series({
+        "Actual Volume":   int(x["Actual Volume"].sum()),
+        "Forecast Volume": int(x["Forecast Volume"].sum()),
+        "Actual AHT":      round(wavg(x["Actual AHT"], x["Actual Volume"]), 1),
+        "Forecast AHT":    round(wavg(x["Forecast AHT"], x["Forecast Volume"]), 1),
+        "SLA":             round(wavg(x["SLA"], x["Actual Volume"]), 1),
+    })).reset_index().rename(columns={"Time": "Date"})
+
+    return df_day.sort_values("Date").reset_index(drop=True)
+
+def volume_fig_2(df, title="Last 7 Days — Volume (Actual vs Forecast)"):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Forecast Volume"], name="Forecast Volume",
+        mode="lines", line=dict(width=3, dash="dash"),
+        hovertemplate="Date: %{x|%Y-%m-%d}<br>Forecast: %{y:,}<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Actual Volume"], name="Actual Volume",
+        mode="lines+markers", line=dict(width=3),
+        hovertemplate="Date: %{x|%Y-%m-%d}<br>Actual: %{y:,}<extra></extra>"
+    ))
+    fig.update_layout(
+        title=title, template="plotly_white", hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=40, r=20, t=60, b=40),
+        xaxis=dict(title=None, tickformat="%b %d", dtick="D1"),
+        yaxis=dict(title="Volume", tickformat=",d")
+    )
+    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor")
+    fig.update_yaxes(showspikes=True, spikemode="across")
+    return fig
+
+def aht_fig_2(df, title="Last 7 Days — AHT (Actual vs Forecast)"):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Forecast AHT"], name="Forecast AHT",
+        mode="lines", line=dict(width=3, dash="dash"),
+        hovertemplate="Date: %{x|%Y-%m-%d}<br>Forecast AHT: %{y}<extra></extra>"
+    ))
+    fig.add_trace(go.Scatter(
+        x=df["Date"], y=df["Actual AHT"], name="Actual AHT",
+        mode="lines+markers", line=dict(width=3),
+        hovertemplate="Date: %{x|%Y-%m-%d}<br>Actual AHT: %{y}<extra></extra>"
+    ))
+    fig.update_layout(
+        title=title, template="plotly_white", hovermode="x unified",
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=40, r=20, t=60, b=40),
+        xaxis=dict(title=None, tickformat="%b %d", dtick="D1"),
+        yaxis=dict(title="AHT (seconds)")
+    )
+    fig.update_xaxes(showspikes=True, spikemode="across", spikesnap="cursor")
+    fig.update_yaxes(showspikes=True, spikemode="across")
+    return fig
+
+##############
 def week_series():
     days=pd.date_range(end=pd.Timestamp.today().normalize()-pd.Timedelta(days=1), periods=7, freq="D")
     base=np.linspace(6800,7200,7); rng=np.random.default_rng(9); noise=rng.normal(0,50,7)
@@ -129,6 +344,148 @@ def dual_line_chart(df,title):
         color=alt.Color("Series:N", scale=color_scale), strokeDash=stroke_dash,
         tooltip=[alt.Tooltip("t:T", title="Time"), "Series:N", alt.Tooltip("Value:Q", title="Value", format=".2f")]
     ).properties(height=220, title=title)
+import streamlit as st
+import pandas as pd
+import calendar
+from datetime import date, datetime
+import holidays
+
+def render_holiday_calendar(
+    start_date,
+    end_date,
+    country: str = "IN",
+    firstweekday: int = 0,     # 0=Monday, 6=Sunday
+    show_legend: bool = True,
+    show_holiday_list: bool = True,
+    title: str | None = None   # e.g., '<div class="bubble system captionline">CALENDAR</div>'
+):
+    """
+    Render calendars for all months between start_date and end_date (inclusive),
+    highlighting public holidays, weekends, and today.
+
+    Parameters
+    ----------
+    start_date : date | str
+        Range start (date object or 'YYYY-MM-DD').
+    end_date   : date | str
+        Range end (date object or 'YYYY-MM-DD').
+    country    : str
+        ISO 3166-1 alpha-2 country code for the `holidays` package (e.g., 'IN', 'US').
+    firstweekday : int
+        0=Monday ... 6=Sunday for the calendar layout.
+    show_legend : bool
+        Show a small legend under each month.
+    show_holiday_list : bool
+        Show an expandable list of holidays that fall within the range.
+    title : str | None
+        Optional HTML string to render as a heading (lets you reuse your .bubble CSS).
+    """
+
+    # --- normalize inputs ---
+    def to_date(d):
+        if isinstance(d, date):
+            return d
+        if isinstance(d, str):
+            return datetime.strptime(d, "%Y-%m-%d").date()
+        raise TypeError("start_date/end_date must be date or 'YYYY-MM-DD' string")
+
+    start_date = to_date(start_date)
+    end_date = to_date(end_date)
+
+    if start_date > end_date:
+        st.warning("Start date is after end date. Please adjust the range.")
+        return
+
+    if title:
+        st.markdown(title, unsafe_allow_html=True)
+
+    # Month boundaries
+    start_month = date(start_date.year, start_date.month, 1)
+    end_month = date(end_date.year, end_date.month, 1)
+
+    # Gather years to fetch holidays once
+    years = list(range(start_month.year, end_month.year + 1))
+
+    # Get holidays for the span
+    try:
+        hol = holidays.country_holidays(country, years=years)
+    except Exception:
+        # Compatibility fallback for older `holidays` versions
+        country_cls = getattr(holidays, country, None)
+        hol = country_cls(years=years) if country_cls else holidays.HolidayBase()
+
+    # Only keep holiday dates inside the exact range
+    holiday_dates = {d for d in hol if start_date <= d <= end_date}
+    holiday_names = {d: hol[d] for d in holiday_dates}
+
+    cal = calendar.Calendar(firstweekday=firstweekday)
+    today = date.today()
+
+    # Iterate months in the range
+    cur_year, cur_month = start_month.year, start_month.month
+    while (cur_year, cur_month) <= (end_month.year, end_month.month):
+        weeks = cal.monthdayscalendar(cur_year, cur_month)  # 0 for padding cells
+        # Mask out days outside [start_date, end_date] (so partial months look clean)
+        masked_weeks = []
+        for w in weeks:
+            row = []
+            for d in w:
+                if d == 0:
+                    row.append("")
+                else:
+                    the_day = date(cur_year, cur_month, d)
+                    if not (start_date <= the_day <= end_date):
+                        row.append("")  # hide out-of-range days
+                    else:
+                        row.append(d)
+            masked_weeks.append(row)
+
+        df = pd.DataFrame(masked_weeks, columns=list(calendar.day_abbr)).replace(0, "")
+
+        # --- formatting and styling ---
+        def fmt_cell(v):
+            if v == "" or v is None:
+                return ""
+            d = date(cur_year, cur_month, int(v))
+            return f"{v} ★" if d in holiday_dates else f"{v}"
+
+        def style_cell(v):
+            if v == "" or v is None:
+                return ""
+            # Value might be "15" or "15 ★" -> extract the number
+            try:
+                day_num = int(str(v).split()[0])
+            except Exception:
+                return ""
+            d = date(cur_year, cur_month, day_num)
+            css = []
+
+            # holidays
+            if d in holiday_dates:
+                css.append("background-color:rgba(253, 224, 71, 0.15); border:1px solid rgba(253, 224, 71, 0.45);")
+            # nice padding/centering
+            css.append("text-align:center; padding:6px; border-radius:8px;")
+            return "".join(css)
+
+        styled = df.style.format(fmt_cell).applymap(style_cell)
+
+        # --- render month ---
+        st.subheader(f"{calendar.month_name[cur_month]} {cur_year}")
+        st.table(styled)
+        if show_legend:
+            st.caption("★ holiday   ·   weekends shaded   ·   today outlined")
+
+        # next month
+        if cur_month == 12:
+            cur_month, cur_year = 1, cur_year + 1
+        else:
+            cur_month += 1
+
+    # Holiday list for the whole range
+    if show_holiday_list and holiday_names:
+        with st.expander("Holiday list in range"):
+            for d, name in sorted(holiday_names.items()):
+                st.write(f"{d:%a, %b %d, %Y}: {name}")
 
 def row(): return st.container()
 
@@ -146,8 +503,16 @@ with row():
     with rcol:
         if st.session_state["show_day"]:
             st.markdown('<div class="bubble system captionline">DAY-LEVEL GRAPH (Yesterday)</div>', unsafe_allow_html=True)
-            st.altair_chart(dual_line_chart(yesterday_series(),"Yesterday — Forecast (solid) vs Actual (dashed)"), use_container_width=True)
+            df = yesterday_series()
+            st.plotly_chart(volume_fig(df), use_container_width=True)
+            st.plotly_chart(aht_fig(df), use_container_width=True)
+            df["SLA"] = pd.to_numeric(df["SLA"], errors="coerce")
+            misses = df[df["SLA"] < 70].copy()
+            if misses.shape[0]>=1:
+               st.warning(f"We’re missing the SLA in time slots {misses['Time'].tolist()}")
 
+
+           
 # ---------- ROW 2: Week (only after Row1 right is visible and YES here) ----------
 if st.session_state["show_day"]:
     with row():
@@ -162,7 +527,13 @@ if st.session_state["show_day"]:
         with rcol:
             if st.session_state["show_week"]:
                 st.markdown('<div class="bubble system captionline">WEEK-LEVEL GRAPH (Last 7 Days)</div>', unsafe_allow_html=True)
-                st.altair_chart(dual_line_chart(week_series(),"Last 7 Days — Forecast (solid) vs Actual (dashed)"), use_container_width=True)
+                df2 = yesterday_series_2()
+                st.plotly_chart(volume_fig_2(df2), use_container_width=True)
+                st.plotly_chart(aht_fig_2(df2), use_container_width=True)
+                df2["SLA"] = pd.to_numeric(df2["SLA"], errors="coerce")
+                misses = df2[df2["SLA"] < 80].copy()
+                if misses.shape[0]>=1:
+                  st.warning(f"We’re missing the SLA in time slots {misses['Date'].tolist()}")
 
 # ---------- ROW 3: Start Forecast (only after Row2 right is visible) ----------
 if st.session_state["show_week"]:
@@ -179,14 +550,8 @@ if st.session_state["show_week"]:
             if st.session_state["started"]:
                 # Interactive calendar + trend
                 t = date.today(); a=t.replace(day=1); b=(a.replace(day=28)+timedelta(days=10)).replace(day=1)-timedelta(days=1)
-                st.markdown('<div class="bubble system captionline">CALENDAR — Interactive (Holidays listed)</div>', unsafe_allow_html=True)
-                st.date_input("Select date or range", value=(a,b))
-                st.markdown('<div class="bubble system captionline">SEASONALITY TRENDS (Last 6 Weeks)</div>', unsafe_allow_html=True)
-                rng=np.random.default_rng(42); trend=np.cumsum(rng.normal(0,8,42))+1000
-                trend_df=pd.DataFrame({"t":pd.date_range(end=pd.Timestamp.today(), periods=len(trend)),"value":trend})
-                st.line_chart(trend_df.set_index("t"))
-                st.markdown('<div class="bubble captionline">I’m thinking about holidays present in the range…</div>', unsafe_allow_html=True)
-                st.markdown('<div class="bubble captionline">I’m thinking about seasonality before holidays… (last 6 weeks data consistent)</div>', unsafe_allow_html=True)
+                start_date, end_date = st.date_input("Select date or range", value=(a,b))
+
 
 # ---------- ROW 4: Base Forecast (only after Row3 right is visible) ----------
 if st.session_state["started"]:
@@ -204,6 +569,10 @@ if st.session_state["started"]:
             if st.session_state["base_ran"]:
                 st.markdown('<div class="bubble system captionline">BASE FORECAST TABLE</div>', unsafe_allow_html=True)
                 st.dataframe(spec_base_df, use_container_width=True)
+                st.markdown('<div class="bubble captionline">Events: There is a marketing event that is present for this as per the Outlook email</div>', unsafe_allow_html=True)
+                render_holiday_calendar(start_date, end_date, country="US", firstweekday=0, title=None)
+                
+		
 
 # ---------- ROW 5: Festivalcast (only after Row4 right is visible) ----------
 if st.session_state["base_ran"]:
