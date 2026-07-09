@@ -1,0 +1,908 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Intelligence Hub — CommandIQ · What-If Customer Service</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ── VARIABLES ─────────────────────────────────────────────────────── */
+:root {
+  --bg:#050810; --bg1:#080e1c; --line:rgba(130,160,210,.1); --line2:rgba(130,160,210,.2);
+  --text:#e6ecf8; --dim:#8090b0; --faint:#405070;
+  --cyan:#42ddff; --vcyan:rgba(66,221,255,.12);
+  --violet:#9b8cff; --vviolet:rgba(155,140,255,.12);
+  --amber:#ffb84a; --vamber:rgba(255,184,74,.12);
+  --rose:#ff5c7a; --vrose:rgba(255,92,122,.12);
+  --mint:#3fe8a8; --vmint:rgba(63,232,168,.12);
+  --r:14px;
+  --mono:'JetBrains Mono',monospace;
+  --disp:'Space Grotesk',sans-serif;
+  --body:'Inter',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{font-size:14px;}
+body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;overflow-x:hidden;}
+::-webkit-scrollbar{width:7px;height:7px;}
+::-webkit-scrollbar-thumb{background:rgba(130,160,210,.15);border-radius:4px;}
+::-webkit-scrollbar-track{background:transparent;}
+::selection{background:rgba(66,221,255,.2);}
+
+/* ── BACKGROUND ────────────────────────────────────────────────────── */
+.bg-blobs{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:
+    radial-gradient(ellipse 1600px 1000px at 0% -5%,rgba(66,221,255,.065) 0%,transparent 55%),
+    radial-gradient(ellipse 1200px 900px at 100% 0%,rgba(155,140,255,.065) 0%,transparent 55%),
+    radial-gradient(ellipse 900px 700px at 50% 110%,rgba(63,232,168,.04) 0%,transparent 55%);}
+.bg-grid{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(130,160,210,.023) 1px,transparent 1px),linear-gradient(90deg,rgba(130,160,210,.023) 1px,transparent 1px);
+  background-size:72px 72px;
+  mask-image:radial-gradient(ellipse 90% 60% at 50% 0%,black,transparent 75%);}
+
+/* ── TOPBAR ────────────────────────────────────────────────────────── */
+.topbar{position:sticky;top:0;z-index:100;height:56px;display:flex;align-items:center;
+  justify-content:space-between;padding:0 24px;
+  background:rgba(5,8,16,.9);backdrop-filter:blur(20px);border-bottom:1px solid var(--line);}
+.brand{display:flex;align-items:center;gap:11px;}
+.bmark{width:30px;height:30px;border-radius:8px;flex-shrink:0;
+  background:conic-gradient(from 200deg,var(--cyan),var(--violet),var(--cyan));
+  display:flex;align-items:center;justify-content:center;
+  font-family:var(--disp);font-weight:700;font-size:13px;color:#030609;
+  box-shadow:0 0 20px rgba(66,221,255,.38);}
+.binfo .bn{font-family:var(--disp);font-weight:600;font-size:14.5px;}
+.binfo .bs{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.1em;text-transform:uppercase;}
+.tnav{display:flex;gap:4px;margin:0 18px;}
+.tpill{display:flex;align-items:center;gap:7px;padding:6px 13px;border-radius:9px;font-size:12.5px;
+  cursor:pointer;color:var(--dim);border:1px solid transparent;transition:all .2s;}
+.tpill:hover{color:var(--text);background:rgba(255,255,255,.04);border-color:var(--line);}
+.tpill.on{color:var(--text);background:rgba(66,221,255,.08);border-color:rgba(66,221,255,.28);}
+.tpill .ti{font-size:11px;opacity:.75;}
+.tpill.on .ti{color:var(--cyan);opacity:1;}
+.tright{display:flex;align-items:center;gap:14px;}
+.live-row{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--dim);letter-spacing:.05em;}
+.ldot{width:6px;height:6px;border-radius:50%;background:var(--mint);box-shadow:0 0 8px var(--mint);animation:blink 2s ease-in-out infinite;}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.3;}}
+.tbadge{font-family:var(--mono);font-size:10px;color:var(--cyan);letter-spacing:.06em;
+  background:var(--vcyan);border:1px solid rgba(66,221,255,.2);padding:4px 9px;border-radius:7px;
+  display:flex;align-items:center;gap:5px;}
+.tclock{font-family:var(--mono);font-size:12.5px;background:rgba(255,255,255,.03);
+  border:1px solid var(--line);padding:5px 11px;border-radius:7px;}
+
+/* ── MAIN WRAP ─────────────────────────────────────────────────────── */
+.wrap{position:relative;z-index:1;max-width:1700px;margin:0 auto;padding:24px 24px 80px;}
+
+/* ── PAGE HEADER ───────────────────────────────────────────────────── */
+.phead{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:24px;}
+.phead-l{display:flex;flex-direction:column;gap:5px;}
+.eyebrow{display:flex;align-items:center;gap:9px;font-family:var(--mono);font-size:10px;
+  color:var(--cyan);letter-spacing:.14em;text-transform:uppercase;}
+.eyebrow::before{content:'';width:16px;height:1px;background:var(--cyan);flex-shrink:0;}
+.ptitle{font-family:var(--disp);font-size:26px;font-weight:700;letter-spacing:-.02em;}
+.ptitle .dsub{color:var(--dim);font-weight:400;font-size:20px;}
+.pmeta{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.05em;}
+.pright{text-align:right;font-family:var(--mono);font-size:11px;color:var(--dim);line-height:1.9;}
+.pright .ts{color:var(--text);font-weight:600;}
+
+/* ── HERO ──────────────────────────────────────────────────────────── */
+.hero{display:grid;grid-template-columns:300px 1fr;gap:16px;margin-bottom:28px;}
+.gpanel{background:linear-gradient(145deg,rgba(255,255,255,.03),rgba(255,255,255,.005));
+  border:1px solid var(--line);border-radius:var(--r);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:24px 16px 18px;position:relative;overflow:hidden;}
+.gpanel::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:conic-gradient(from 0deg,transparent,rgba(66,221,255,.08) 30deg,transparent 70deg);
+  animation:gsweep 7s linear infinite;}
+@keyframes gsweep{to{transform:rotate(360deg);}}
+@media(prefers-reduced-motion:reduce){.gpanel::before{animation:none;}}
+.gsvg-wrap{position:relative;z-index:1;width:188px;height:188px;}
+.gsvg-wrap svg{transform:rotate(-90deg);}
+.gcenter{position:absolute;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+.gnum{font-family:var(--disp);font-size:38px;font-weight:700;letter-spacing:-.02em;
+  background:linear-gradient(160deg,#fff,var(--cyan));-webkit-background-clip:text;background-clip:text;color:transparent;line-height:1;}
+.glabel{font-family:var(--mono);font-size:10px;color:var(--dim);letter-spacing:.09em;text-transform:uppercase;margin-top:2px;}
+.gleg{display:flex;gap:16px;margin-top:14px;}
+.gli{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10.5px;color:var(--dim);}
+.gls{width:9px;height:9px;border-radius:2px;flex-shrink:0;}
+.hright{display:grid;grid-template-rows:auto 1fr;gap:16px;}
+.krow{display:grid;grid-template-columns:repeat(5,1fr);gap:11px;}
+.kt{background:linear-gradient(180deg,rgba(255,255,255,.03),rgba(255,255,255,.005));
+  border:1px solid var(--line);border-radius:12px;padding:15px 15px 13px;position:relative;overflow:hidden;}
+.kt::after{content:'';position:absolute;inset:0;border-radius:inherit;
+  background:linear-gradient(130deg,rgba(255,255,255,.025),transparent);pointer-events:none;}
+.kn{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--text);line-height:1.1;}
+.kl{font-size:11.5px;color:var(--dim);margin-top:5px;}
+.ktr{font-family:var(--mono);font-size:10px;margin-top:5px;}
+.up{color:var(--mint);}.down{color:var(--rose);}.warn{color:var(--amber);}
+.ac-c{border-color:rgba(66,221,255,.25);}.ac-c .kn{color:var(--cyan);}
+.ac-r{border-color:rgba(255,92,122,.25);}.ac-r .kn{color:var(--rose);}
+.ac-m{border-color:rgba(63,232,168,.25);}.ac-m .kn{color:var(--mint);}
+.ac-a{border-color:rgba(255,184,74,.25);}.ac-a .kn{color:var(--amber);}
+.ac-v{border-color:rgba(155,140,255,.25);}.ac-v .kn{color:var(--violet);}
+.fpanel{background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,.005));
+  border:1px solid var(--line);border-radius:var(--r);display:flex;flex-direction:column;overflow:hidden;}
+.fphead{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;
+  border-bottom:1px solid var(--line);flex-shrink:0;}
+.fphead h3{font-family:var(--disp);font-size:13px;font-weight:600;}
+.fptag{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.07em;
+  background:rgba(255,255,255,.03);padding:3px 7px;border-radius:4px;}
+.fbody{flex:1;overflow-y:auto;}
+.frow{display:flex;align-items:center;gap:11px;padding:8px 16px;
+  border-bottom:1px solid rgba(130,160,210,.05);font-family:var(--mono);font-size:11.5px;}
+.frow .frt{color:var(--faint);flex-shrink:0;min-width:65px;}
+.frow .frb{width:5px;height:5px;border-radius:50%;flex-shrink:0;}
+.frow .frm{color:var(--dim);line-height:1.5;flex:1;}
+.frow .frm b{color:var(--text);font-weight:600;}
+
+/* ── SECTION HEADERS ───────────────────────────────────────────────── */
+.shead{display:flex;align-items:center;justify-content:space-between;margin:32px 0 16px;flex-wrap:wrap;gap:12px;}
+.stitle{font-family:var(--disp);font-size:16px;font-weight:600;}
+.ssub{font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.07em;text-transform:uppercase;margin-top:2px;}
+
+/* ── FILTER BAR ────────────────────────────────────────────────────── */
+.fbar{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:16px;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{font-family:var(--mono);font-size:11.5px;letter-spacing:.03em;padding:7px 13px;border-radius:18px;
+  border:1px solid var(--line);color:var(--dim);cursor:pointer;transition:all .2s;background:transparent;}
+.chip:hover{border-color:var(--line2);color:var(--text);}
+.chip.on{background:var(--text);color:#030608;border-color:var(--text);font-weight:700;}
+.chip .cn{opacity:.6;margin-left:4px;}
+.swrap{display:flex;align-items:center;gap:7px;border:1px solid var(--line);border-radius:18px;
+  padding:7px 14px;min-width:230px;transition:border-color .2s;}
+.swrap:focus-within{border-color:rgba(66,221,255,.3);}
+.swrap span{color:var(--faint);font-size:13px;}
+.swrap input{background:transparent;border:none;outline:none;color:var(--text);font-family:var(--mono);font-size:12px;width:100%;}
+.swrap input::placeholder{color:var(--faint);}
+
+/* ── CARD GRID ─────────────────────────────────────────────────────── */
+.cgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(285px,1fr));gap:13px;}
+@media(min-width:1580px){.cgrid{grid-template-columns:repeat(5,1fr);}}
+@media(min-width:1260px) and (max-width:1579px){.cgrid{grid-template-columns:repeat(4,1fr);}}
+
+.card{background:linear-gradient(155deg,rgba(255,255,255,.028),rgba(255,255,255,.005));
+  border:1px solid var(--line);border-left:3px solid var(--ce,var(--faint));
+  border-radius:var(--r);padding:16px;cursor:pointer;
+  transition:transform .22s,box-shadow .22s;
+  opacity:0;transform:translateY(8px);animation:cfade .45s ease forwards;}
+@keyframes cfade{to{opacity:1;transform:translateY(0);}}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 32px -10px rgba(0,0,0,.55),0 0 0 1px var(--line2);}
+.ctop{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;}
+.cname{font-family:var(--disp);font-size:13.5px;font-weight:600;line-height:1.3;color:var(--text);}
+.cflag{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.05em;text-transform:uppercase;margin-top:3px;}
+.gbadge{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;
+  padding:4px 8px;border-radius:5px;white-space:nowrap;flex-shrink:0;align-self:flex-start;}
+.cspark{margin:10px 0 2px;}
+.ssvg{width:100%;height:26px;overflow:visible;}
+.cmid{display:grid;grid-template-columns:66px 1fr;gap:12px;align-items:center;margin-top:12px;}
+.crw{position:relative;width:66px;height:66px;flex-shrink:0;}
+.crw svg{transform:rotate(-90deg);}
+.crv{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;}
+.crv .rn{font-family:var(--mono);font-size:13.5px;font-weight:700;line-height:1;}
+.crv .rl{font-family:var(--mono);font-size:7.5px;color:var(--faint);letter-spacing:.05em;text-transform:uppercase;}
+.mlist{display:flex;flex-direction:column;gap:5px;}
+.mrow{display:flex;justify-content:space-between;align-items:center;}
+.mk{font-size:11px;color:var(--faint);}
+.mv{font-family:var(--mono);font-size:11.5px;color:var(--dim);}
+.occrow{display:flex;flex-direction:column;gap:3px;}
+.occhd{display:flex;justify-content:space-between;}
+.occbar{height:4px;background:rgba(130,160,210,.08);border-radius:2px;overflow:hidden;}
+.occfill{height:100%;border-radius:2px;}
+.cfoot{margin-top:12px;padding-top:10px;border-top:1px solid rgba(130,160,210,.07);
+  display:flex;justify-content:space-between;align-items:center;}
+.ebl{display:flex;flex-direction:column;gap:1px;}
+.el{font-size:9.5px;color:var(--faint);}
+.ev{font-family:var(--mono);font-size:13.5px;font-weight:700;}
+.fbl{font-family:var(--mono);font-size:10px;padding:4px 8px;border-radius:5px;}
+
+/* ── ACTION PLAN TABLE ─────────────────────────────────────────────── */
+.tpanel{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.005));
+  border:1px solid var(--line);border-radius:var(--r);overflow:hidden;}
+.twrap{overflow-x:auto;}
+.apt{width:100%;border-collapse:collapse;font-size:12.5px;}
+.apt thead tr{background:rgba(255,255,255,.03);border-bottom:1px solid var(--line);}
+.apt thead th{font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);padding:11px 14px;text-align:left;white-space:nowrap;}
+.apt tbody tr{border-bottom:1px solid rgba(130,160,210,.06);transition:background .15s;cursor:pointer;}
+.apt tbody tr:last-child{border-bottom:none;}
+.apt tbody tr:hover{background:rgba(255,255,255,.025);}
+.apt tbody td{padding:11px 14px;color:var(--dim);vertical-align:middle;}
+.apt td.rg{font-family:var(--disp);font-size:12.5px;font-weight:600;color:var(--text);white-space:nowrap;}
+.apt td.mn{font-family:var(--mono);}
+.apt td.ac{font-family:var(--mono);font-size:11px;max-width:340px;line-height:1.55;color:var(--dim);}
+.ebtn{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.05em;
+  padding:7px 13px;border-radius:7px;border:1px solid rgba(66,221,255,.3);
+  background:rgba(66,221,255,.08);color:var(--cyan);cursor:pointer;white-space:nowrap;transition:all .2s;}
+.ebtn:hover{background:rgba(66,221,255,.18);box-shadow:0 0 14px rgba(66,221,255,.28);transform:translateY(-1px);}
+
+/* ── DETAIL PANEL ──────────────────────────────────────────────────── */
+.ovl{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.58);backdrop-filter:blur(5px);
+  opacity:0;pointer-events:none;transition:opacity .3s;}
+.ovl.on{opacity:1;pointer-events:all;}
+.dpanel{position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100vw;z-index:210;
+  background:var(--bg1);border-left:1px solid var(--line2);
+  display:flex;flex-direction:column;
+  transform:translateX(100%);transition:transform .35s cubic-bezier(.2,.8,.2,1);overflow:hidden;}
+.dpanel.open{transform:translateX(0);}
+.dp-h{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;
+  padding:20px 22px 16px;border-bottom:1px solid var(--line);flex-shrink:0;}
+.dp-ht{display:flex;flex-direction:column;gap:3px;}
+.dp-tit{font-family:var(--disp);font-size:15.5px;font-weight:700;line-height:1.3;}
+.dp-sub{font-family:var(--mono);font-size:9px;color:var(--faint);letter-spacing:.07em;text-transform:uppercase;}
+.dp-x{width:30px;height:30px;border-radius:7px;border:1px solid var(--line);background:rgba(255,255,255,.04);
+  color:var(--dim);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:all .2s;}
+.dp-x:hover{background:rgba(255,255,255,.09);color:var(--text);}
+.dp-body{flex:1;overflow-y:auto;padding:18px 22px;display:flex;flex-direction:column;gap:18px;}
+.dp-sec{}
+.dp-sl{font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--faint);margin-bottom:10px;display:flex;align-items:center;gap:9px;}
+.dp-sl::after{content:'';flex:1;height:1px;background:var(--line);}
+.dp-act{background:rgba(255,255,255,.025);border:1px solid var(--line);border-radius:10px;
+  padding:13px 15px;font-family:var(--mono);font-size:11.5px;line-height:1.65;color:var(--dim);}
+.dp-gr{display:flex;align-items:center;gap:8px;margin-top:10px;}
+.dp-gl{font-size:11px;color:var(--faint);}
+.dp-gb{font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 9px;border-radius:5px;}
+.dpg{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;}
+.dpg4{grid-template-columns:repeat(4,1fr);}
+.dpm{background:rgba(255,255,255,.02);border:1px solid var(--line);border-radius:9px;padding:11px 13px;}
+.dpm .dl{font-size:10px;color:var(--faint);margin-bottom:4px;}
+.dpm .dv{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--text);line-height:1;}
+.dpm .ds{font-family:var(--mono);font-size:9px;color:var(--faint);margin-top:2px;}
+.mtb{width:100%;border-collapse:collapse;}
+.mtb thead th{font-family:var(--mono);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--faint);padding:7px 9px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;}
+.mtb tbody tr{border-bottom:1px solid rgba(130,160,210,.05);}
+.mtb tbody td{padding:8px 9px;color:var(--dim);font-family:var(--mono);font-size:11px;vertical-align:top;}
+.mtb td.mti{color:var(--cyan);font-weight:600;}
+.mtb td.mta{font-size:10px;color:var(--faint);line-height:1.55;max-width:170px;}
+
+/* ── FOOTER ────────────────────────────────────────────────────────── */
+.foot{margin-top:44px;padding-top:14px;border-top:1px solid var(--line);
+  display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;
+  font-family:var(--mono);font-size:10px;color:var(--faint);letter-spacing:.04em;}
+</style>
+</head>
+<body>
+<div class="bg-blobs"></div>
+<div class="bg-grid"></div>
+
+<!-- ── TOPBAR ─────────────────────────────────────────────────────── -->
+<header class="topbar">
+  <div class="brand">
+    <div class="bmark">Q</div>
+    <div class="binfo">
+      <div class="bn">Intelligence Hub</div>
+      <div class="bs">GWFO CommandIQ · Global Workforce Optimization</div>
+    </div>
+  </div>
+  <nav class="tnav">
+    <div class="tpill on"><span class="ti">◈</span> What-If Dashboard</div>
+    <div class="tpill"><span class="ti">▲</span> Proactive Alerts</div>
+    <div class="tpill"><span class="ti">▤</span> Conversational BI</div>
+    <div class="tpill"><span class="ti">✦</span> Deep Insights</div>
+  </nav>
+  <div class="tright">
+    <div class="live-row"><span class="ldot"></span> LIVE · 54 RGs</div>
+    <div class="tbadge">⟳ AUTO-REFRESH 30 MIN</div>
+    <div class="tclock" id="clock">--:--:-- CST</div>
+  </div>
+</header>
+
+<!-- ── MAIN ───────────────────────────────────────────────────────── -->
+<main class="wrap">
+
+  <!-- PAGE HEAD -->
+  <div class="phead">
+    <div class="phead-l">
+      <div class="eyebrow">Customer Service · What-If · Decision Interval 08:30 CST</div>
+      <h1 class="ptitle">Network Pulse <span class="dsub">/ Live · 07/09/2026</span></h1>
+      <div class="pmeta">All times CST · Auto-refreshes every 30 min · All Business Groups · GQL: Intelligence/prompt.js</div>
+    </div>
+    <div class="pright">Last Updated: <span class="ts">08:46:41 AM CST</span><br>Live – 54 RGs Active · 08:44:50 AM CST</div>
+  </div>
+
+  <!-- HERO -->
+  <div class="hero">
+    <div class="gpanel">
+      <div class="gsvg-wrap">
+        <svg width="188" height="188" viewBox="0 0 188 188">
+          <circle cx="94" cy="94" r="84" fill="none" stroke="rgba(130,160,210,.07)" stroke-width="10"/>
+          <circle id="rSVL" cx="94" cy="94" r="84" fill="none" stroke="var(--cyan)" stroke-width="10" stroke-linecap="round" stroke-dasharray="528" stroke-dashoffset="528"/>
+          <circle cx="94" cy="94" r="66" fill="none" stroke="rgba(130,160,210,.07)" stroke-width="8"/>
+          <circle id="rOcc" cx="94" cy="94" r="66" fill="none" stroke="var(--violet)" stroke-width="8" stroke-linecap="round" stroke-dasharray="415" stroke-dashoffset="415"/>
+        </svg>
+        <div class="gcenter">
+          <div class="gnum" id="gnum">0%</div>
+          <div class="glabel">Network SVL</div>
+        </div>
+      </div>
+      <div class="gleg">
+        <div class="gli"><span class="gls" style="background:var(--cyan)"></span>MTD SVL</div>
+        <div class="gli"><span class="gls" style="background:var(--violet)"></span>Avg Occ.</div>
+      </div>
+    </div>
+    <div class="hright">
+      <div class="krow">
+        <div class="kt ac-c"><div class="kn" data-t="85">0</div><div class="kl">Network SVL %</div><div class="ktr up">▲ 0.8% vs yesterday</div></div>
+        <div class="kt ac-r"><div class="kn" data-t="9">0</div><div class="kl">High Deficit RGs</div><div class="ktr down">▼ 2 groups critical</div></div>
+        <div class="kt ac-m"><div class="kn" data-t="5">0</div><div class="kl">Surplus RGs</div><div class="ktr up">▲ VTO eligible</div></div>
+        <div class="kt ac-a"><div class="kn" data-t="1842">0</div><div class="kl">Agents Logged In</div><div class="ktr warn">◈ Real-time Avaya</div></div>
+        <div class="kt ac-v"><div class="kn" data-t="6">0</div><div class="kl">Neutral RGs</div><div class="ktr" style="color:var(--dim)">— Monitoring</div></div>
+      </div>
+      <div class="fpanel">
+        <div class="fphead"><h3>Mission Feed</h3><span class="fptag">LIVE EVENTS</span></div>
+        <div class="fbody" id="feed"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SUMMARY VIEW -->
+  <div class="shead">
+    <div>
+      <div class="stitle">Summary View <span style="color:var(--faint);font-weight:400;font-size:13px;">— As of latest decision interval 08:30 CST</span></div>
+      <div class="ssub">Click any report group card to view full detail — running actuals · 2-hr avg · decision drivers · interval plan</div>
+    </div>
+  </div>
+  <div class="fbar">
+    <div class="chips" id="chips">
+      <button class="chip on" data-f="all">All Groups <span class="cn">20</span></button>
+      <button class="chip" data-f="high-deficit">⬤ High Deficit <span class="cn">9</span></button>
+      <button class="chip" data-f="neutral">⬤ Neutral <span class="cn">6</span></button>
+      <button class="chip" data-f="low-surplus">⬤ Low Surplus <span class="cn">2</span></button>
+      <button class="chip" data-f="surplus">⬤ Surplus <span class="cn">2</span></button>
+      <button class="chip" data-f="high-surplus">⬤ High Surplus <span class="cn">1</span></button>
+    </div>
+    <div class="swrap"><span>⌕</span><input type="text" id="search" placeholder="Search report groups…"></div>
+  </div>
+  <div class="cgrid" id="cgrid"></div>
+
+  <!-- INTERVAL ACTION PLAN -->
+  <div class="shead" style="margin-top:40px;">
+    <div>
+      <div class="stitle">Interval Action Plan <span style="color:var(--faint);font-weight:400;font-size:13px;">— as of latest decision interval 08:30 CST</span></div>
+      <div class="ssub">All 20 groups · sorted by gap priority · scroll right for full columns · next decision 09:14 AM CST</div>
+    </div>
+  </div>
+  <div class="tpanel">
+    <div class="twrap">
+      <table class="apt">
+        <thead>
+          <tr>
+            <th>Report Group Name</th>
+            <th>Fcst. Call Vol.</th>
+            <th>Fcst. AHT (sec)</th>
+            <th>Agents In</th>
+            <th>Req. FTE</th>
+            <th>Rec. FTE</th>
+            <th>ACD Off. O/U</th>
+            <th>AHT O/U</th>
+            <th>Proj. EOI SVL</th>
+            <th>Gap Category</th>
+            <th>Recommended Action</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="aptb"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="foot">
+    <span>CommandIQ Intelligence Agent · GWFO · Confidential · GQL: Intelligence/prompt.js</span>
+    <span>DB: CommandIQ · DataReportingZone · 07/09/2026 08:47:41 AM CST</span>
+  </div>
+</main>
+
+<!-- DETAIL PANEL -->
+<div class="ovl" id="ovl" onclick="closeD()"></div>
+<aside class="dpanel" id="dp">
+  <div class="dp-h">
+    <div class="dp-ht">
+      <div class="dp-tit" id="dptit"></div>
+      <div class="dp-sub" id="dpsub"></div>
+    </div>
+    <button class="dp-x" onclick="closeD()">✕</button>
+  </div>
+  <div class="dp-body" id="dpb"></div>
+</aside>
+
+<script>
+/* ── GAP META ────────────────────────────────────────────────────── */
+const G = {
+  'high-deficit': {label:'HIGH DEFICIT', color:'#ff5c7a', dim:'rgba(255,92,122,.15)', edge:'#ff5c7a'},
+  'neutral':      {label:'NEUTRAL',      color:'#9b8cff', dim:'rgba(155,140,255,.15)', edge:'#9b8cff'},
+  'low-surplus':  {label:'LOW SURPLUS',  color:'#ffb84a', dim:'rgba(255,184,74,.15)',  edge:'#ffb84a'},
+  'surplus':      {label:'SURPLUS',      color:'#3fe8a8', dim:'rgba(63,232,168,.15)',  edge:'#3fe8a8'},
+  'high-surplus': {label:'HIGH SURPLUS', color:'#42ddff', dim:'rgba(66,221,255,.15)',  edge:'#42ddff'},
+};
+
+/* ── DATA ────────────────────────────────────────────────────────── */
+const GROUPS = [
+  // ── CANADA ──────────────────────────────────────────────────────
+  {id:'can-comm',
+   name:'Canada Commercial – Total', flag:'Non-Contractual', svlTgt:80,
+   mtdSVL:97.4, mtdASA:6,   mtdOcc:36.2, projEOI:99.8, gap:'low-surplus',
+   rSVL:98.1, rASA:4,   rAbnd:0.1, rOcc:33.8,
+   c2h:5.5, aht2h:342, asa2h:4,   abnd2h:0.0, occ2h:33.2, acdOU:0, ahtOU:0.0,
+   fcCV:6,   fcAHT:349, fcEOI:99.4,  agIn:6,  reqFTE:7,  recFTE:5,
+   action:'Offer VTO/Offline of 1 FTE — surplus capacity confirmed.',
+   ivs:[{t:'08:46 AM',cv:6,aht:349,ag:6,req:7,rec:5,eoi:99.4,a:'Offer VTO/Offline of 1 FTE'},
+        {t:'09:15 AM',cv:5,aht:352,ag:6,req:6,rec:5,eoi:100.2,a:'Offer VTO/Offline of 1 FTE'},
+        {t:'09:45 AM',cv:5,aht:348,ag:6,req:6,rec:5,eoi:100.2,a:'Offer VTO/Offline of 1 FTE'},
+        {t:'10:15 AM',cv:4,aht:345,ag:6,req:5,rec:5,eoi:100.2,a:'Offer VTO/Offline of 1 FTE'}]},
+
+  {id:'can-credit-j',
+   name:'Canada Credit Judgmental', flag:'Non-Contractual', svlTgt:80,
+   mtdSVL:89.5, mtdASA:15,  mtdOcc:17.6, projEOI:100.4, gap:'neutral',
+   rSVL:91.2, rASA:12,  rAbnd:0.0, rOcc:18.1,
+   c2h:3.2, aht2h:298, asa2h:14,  abnd2h:0.0, occ2h:17.0, acdOU:0, ahtOU:0.0,
+   fcCV:8,   fcAHT:310, fcEOI:100.4, agIn:8, reqFTE:6,  recFTE:8,
+   action:'No action required — performance within target range.',
+   ivs:[{t:'08:46 AM',cv:8,aht:310,ag:8,req:6,rec:8,eoi:100.4,a:'No action required'},
+        {t:'09:15 AM',cv:7,aht:312,ag:8,req:6,rec:8,eoi:100.4,a:'No action required'},
+        {t:'09:45 AM',cv:7,aht:308,ag:8,req:5,rec:8,eoi:100.4,a:'No action required'},
+        {t:'10:15 AM',cv:6,aht:305,ag:8,req:5,rec:8,eoi:100.4,a:'No action required'}]},
+
+  {id:'can-thd',
+   name:'Canada THD Specialty Merchants Cons – Totals', flag:'Non-Contractual', svlTgt:80,
+   mtdSVL:85.6, mtdASA:15,  mtdOcc:70.8, projEOI:90.4, gap:'neutral',
+   rSVL:86.3, rASA:14,  rAbnd:0.8, rOcc:69.5,
+   c2h:12.3, aht2h:425, asa2h:16,  abnd2h:0.7, occ2h:68.9, acdOU:0, ahtOU:0.0,
+   fcCV:22,  fcAHT:430, fcEOI:90.4,  agIn:14, reqFTE:12, recFTE:14,
+   action:'Monitor occupancy trending toward threshold. No VTO eligible this interval.',
+   ivs:[{t:'08:46 AM',cv:22,aht:430,ag:14,req:12,rec:14,eoi:90.4,a:'Monitor occupancy'},
+        {t:'09:15 AM',cv:20,aht:428,ag:14,req:11,rec:14,eoi:91.2,a:'Monitor occupancy'},
+        {t:'09:45 AM',cv:19,aht:425,ag:14,req:11,rec:14,eoi:91.8,a:'Monitor occupancy'},
+        {t:'10:15 AM',cv:18,aht:422,ag:14,req:10,rec:14,eoi:92.1,a:'Monitor'}]},
+
+  // ── CITI CARDS ──────────────────────────────────────────────────
+  {id:'citi-aal-sales',
+   name:'Citi Cards AAL Servicing Sales', flag:'Contractual', svlTgt:90,
+   mtdSVL:95.9, mtdASA:5,   mtdOcc:90.1, projEOI:85.6, gap:'high-deficit',
+   rSVL:94.2, rASA:6,   rAbnd:1.2, rOcc:88.7,
+   c2h:45.2, aht2h:312, asa2h:5,   abnd2h:1.1, occ2h:87.9, acdOU:0, ahtOU:0.0,
+   fcCV:82,  fcAHT:315, fcEOI:85.6,  agIn:38, reqFTE:44, recFTE:38,
+   action:'VTO cannot be offered — occupancy 90.1% above threshold. Proj. EOI SVL 85.6% below 90% target.',
+   ivs:[{t:'08:46 AM',cv:82,aht:315,ag:38,req:44,rec:38,eoi:85.6,a:'VTO blocked — high occupancy'},
+        {t:'09:15 AM',cv:79,aht:318,ag:38,req:43,rec:38,eoi:86.2,a:'VTO blocked'},
+        {t:'09:45 AM',cv:76,aht:315,ag:38,req:41,rec:38,eoi:87.1,a:'VTO blocked'},
+        {t:'10:15 AM',cv:72,aht:312,ag:38,req:39,rec:38,eoi:88.0,a:'VTO blocked — monitor'}]},
+
+  {id:'citi-aal-svc',
+   name:'Citi Cards AAL Servicing Service', flag:'Contractual', svlTgt:90,
+   mtdSVL:99.6, mtdASA:1,   mtdOcc:73.1, projEOI:92.5, gap:'high-surplus',
+   rSVL:99.8, rASA:1,   rAbnd:0.0, rOcc:72.4,
+   c2h:18.5, aht2h:280, asa2h:1,   abnd2h:0.0, occ2h:71.8, acdOU:0, ahtOU:0.0,
+   fcCV:32,  fcAHT:282, fcEOI:92.5,  agIn:22, reqFTE:14, recFTE:22,
+   action:'HIGH SURPLUS — Hold agents for cross-skill deployment or offer VTO/Offline. Coordinate with floor manager.',
+   ivs:[{t:'08:46 AM',cv:32,aht:282,ag:22,req:14,rec:22,eoi:92.5,a:'Hold for cross-skill or VTO'},
+        {t:'09:15 AM',cv:30,aht:280,ag:22,req:13,rec:22,eoi:92.8,a:'Hold for cross-skill or VTO'},
+        {t:'09:45 AM',cv:28,aht:278,ag:22,req:12,rec:22,eoi:93.1,a:'Hold for cross-skill or VTO'},
+        {t:'10:15 AM',cv:26,aht:275,ag:22,req:11,rec:22,eoi:93.4,a:'VTO/cross-skill eligible'}]},
+
+  {id:'citi-bdeu',
+   name:'Citi Cards BDEU', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:80.3, mtdASA:188, mtdOcc:78.1, projEOI:37.1, gap:'high-deficit',
+   rSVL:78.9, rASA:195, rAbnd:4.2, rOcc:79.3,
+   c2h:62.1, aht2h:520, asa2h:190, abnd2h:4.5, occ2h:80.1, acdOU:0, ahtOU:0.0,
+   fcCV:115, fcAHT:525, fcEOI:37.1,  agIn:48, reqFTE:68, recFTE:48,
+   action:'VTO cannot be offered — MTD SVL 80.3% below 84% target. EOI critically low at 37.1%. Push overflow to Domestic queue.',
+   ivs:[{t:'08:46 AM',cv:115,aht:525,ag:48,req:68,rec:48,eoi:37.1,a:'VTO blocked — overflow routing'},
+        {t:'09:15 AM',cv:112,aht:520,ag:48,req:65,rec:48,eoi:38.2,a:'VTO blocked — overflow routing'},
+        {t:'09:45 AM',cv:108,aht:518,ag:48,req:63,rec:48,eoi:39.4,a:'VTO blocked'},
+        {t:'10:15 AM',cv:105,aht:515,ag:48,req:61,rec:48,eoi:40.8,a:'VTO blocked'}]},
+
+  {id:'citi-biz',
+   name:'Citi Cards CitiBusiness', flag:'Non-Contractual', svlTgt:80,
+   mtdSVL:69.9, mtdASA:149, mtdOcc:86.9, projEOI:82.9, gap:'neutral',
+   rSVL:70.4, rASA:152, rAbnd:3.1, rOcc:85.8,
+   c2h:38.4, aht2h:486, asa2h:148, abnd2h:3.0, occ2h:85.2, acdOU:0, ahtOU:0.0,
+   fcCV:68,  fcAHT:490, fcEOI:82.9,  agIn:32, reqFTE:36, recFTE:32,
+   action:'Occupancy trending high at 86.9%. VTO not recommended. Reassess next interval.',
+   ivs:[{t:'08:46 AM',cv:68,aht:490,ag:32,req:36,rec:32,eoi:82.9,a:'Reassess — high occupancy'},
+        {t:'09:15 AM',cv:65,aht:488,ag:32,req:34,rec:32,eoi:83.5,a:'Reassess next interval'},
+        {t:'09:45 AM',cv:62,aht:485,ag:32,req:33,rec:32,eoi:84.2,a:'Monitor — approaching target'},
+        {t:'10:15 AM',cv:60,aht:482,ag:32,req:31,rec:32,eoi:85.0,a:'Target within reach'}]},
+
+  {id:'costco-sb-sales',
+   name:'Citi Cards Costco Cons and SB Sales', flag:'Contractual', svlTgt:94,
+   mtdSVL:95.4, mtdASA:7,   mtdOcc:90.9, projEOI:38.2, gap:'high-deficit',
+   rSVL:94.8, rASA:8,   rAbnd:0.9, rOcc:89.7,
+   c2h:52.3, aht2h:368, asa2h:7,   abnd2h:0.8, occ2h:89.2, acdOU:0, ahtOU:0.0,
+   fcCV:92,  fcAHT:372, fcEOI:38.2,  agIn:44, reqFTE:48, recFTE:44,
+   action:'VTO cannot be offered — Proj. EOI SVL 38.2% well below target. High occupancy risk at 90.9%.',
+   ivs:[{t:'08:46 AM',cv:92,aht:372,ag:44,req:48,rec:44,eoi:38.2,a:'VTO blocked — EOI critical'},
+        {t:'09:15 AM',cv:89,aht:370,ag:44,req:46,rec:44,eoi:39.5,a:'VTO blocked'},
+        {t:'09:45 AM',cv:85,aht:368,ag:44,req:44,rec:44,eoi:41.0,a:'VTO blocked — EOI improving'},
+        {t:'10:15 AM',cv:82,aht:366,ag:44,req:42,rec:44,eoi:42.5,a:'VTO blocked — monitor'}]},
+
+  {id:'costco-sb-svc',
+   name:'Citi Cards Costco Cons and SB Service', flag:'Contractual', svlTgt:94,
+   mtdSVL:97.7, mtdASA:6,   mtdOcc:77.8, projEOI:40.6, gap:'high-deficit',
+   rSVL:97.2, rASA:6,   rAbnd:0.4, rOcc:76.9,
+   c2h:38.6, aht2h:355, asa2h:6,   abnd2h:0.3, occ2h:76.2, acdOU:0, ahtOU:0.0,
+   fcCV:68,  fcAHT:358, fcEOI:40.6,  agIn:36, reqFTE:34, recFTE:36,
+   action:'VTO cannot be offered — Proj. EOI SVL 40.6% critically below 94% target.',
+   ivs:[{t:'08:46 AM',cv:68,aht:358,ag:36,req:34,rec:36,eoi:40.6,a:'VTO blocked — EOI critical'},
+        {t:'09:15 AM',cv:65,aht:356,ag:36,req:33,rec:36,eoi:41.8,a:'VTO blocked'},
+        {t:'09:45 AM',cv:62,aht:354,ag:36,req:31,rec:36,eoi:43.1,a:'VTO blocked — improving'},
+        {t:'10:15 AM',cv:60,aht:352,ag:36,req:30,rec:36,eoi:44.5,a:'VTO blocked — monitor'}]},
+
+  {id:'costco-consumer',
+   name:'Citi Cards Costco Consumer and SB', flag:'Contractual', svlTgt:94,
+   mtdSVL:97.4, mtdASA:6,   mtdOcc:78.1, projEOI:19.4, gap:'high-deficit',
+   rSVL:96.8, rASA:7,   rAbnd:0.5, rOcc:77.4,
+   c2h:28.4, aht2h:348, asa2h:6,   abnd2h:0.4, occ2h:76.8, acdOU:0, ahtOU:0.0,
+   fcCV:50,  fcAHT:352, fcEOI:19.4,  agIn:28, reqFTE:26, recFTE:28,
+   action:'VTO cannot be offered — Proj. EOI SVL 19.4% critically below 94% target. Urgent staffing review required.',
+   ivs:[{t:'08:46 AM',cv:50,aht:352,ag:28,req:26,rec:28,eoi:19.4,a:'VTO blocked — critical EOI'},
+        {t:'09:15 AM',cv:48,aht:350,ag:28,req:25,rec:28,eoi:20.8,a:'VTO blocked — critical EOI'},
+        {t:'09:45 AM',cv:46,aht:348,ag:28,req:24,rec:28,eoi:22.1,a:'VTO blocked'},
+        {t:'10:15 AM',cv:44,aht:345,ag:28,req:23,rec:28,eoi:23.5,a:'VTO blocked'}]},
+
+  {id:'costco-sp-sales',
+   name:'Citi Cards Costco Spanish Sales', flag:'Non-Contractual', svlTgt:94,
+   mtdSVL:92.1, mtdASA:1,   mtdOcc:36.1, projEOI:98.9, gap:'low-surplus',
+   rSVL:97.0, rASA:1,   rAbnd:0.0, rOcc:36.1,
+   c2h:4.5,  aht2h:253, asa2h:1,   abnd2h:0.0, occ2h:32.3, acdOU:0, ahtOU:0.0,
+   fcCV:16,  fcAHT:338, fcEOI:98.9,  agIn:10, reqFTE:6,  recFTE:10,
+   action:'VTO cannot be offered since → MTD SVL (92.10%) falls below target (94.0%).',
+   ivs:[{t:'08:46 AM',cv:16,aht:338,ag:10,req:6,rec:10,eoi:98.9, a:'VTO cannot be offered → MTD SVL below target (94.0%)'},
+        {t:'09:15 AM',cv:16,aht:341,ag:10,req:6,rec:10,eoi:100.4,a:'VTO cannot be offered → MTD SVL below target (94.0%)'},
+        {t:'09:45 AM',cv:15,aht:345,ag:10,req:6,rec:10,eoi:100.4,a:'VTO cannot be offered → MTD SVL below target (94.0%)'},
+        {t:'10:15 AM',cv:15,aht:344,ag:10,req:6,rec:10,eoi:100.4,a:'VTO cannot be offered → MTD SVL below target (94.0%)'}]},
+
+  // ── NAM CS ──────────────────────────────────────────────────────
+  {id:'nam-cau-tot',
+   name:'NAM CS RS CAU Total', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:88.2, mtdASA:32,  mtdOcc:62.4, projEOI:99.6, gap:'neutral',
+   rSVL:89.1, rASA:30,  rAbnd:2.1, rOcc:61.8,
+   c2h:48.2, aht2h:392, asa2h:31,  abnd2h:2.1, occ2h:61.2, acdOU:0, ahtOU:0.0,
+   fcCV:51,  fcAHT:396, fcEOI:99.6,  agIn:29, reqFTE:27, recFTE:29,
+   action:'VTO cannot be offered since → Abandon rate (2.10%) is greater than 2.0%.',
+   ivs:[{t:'08:46 AM',cv:51,aht:396,ag:29,req:27,rec:29,eoi:99.6,a:'VTO blocked — abandon rate 2.1%'},
+        {t:'09:15 AM',cv:49,aht:394,ag:29,req:26,rec:29,eoi:99.7,a:'Monitor abandon rate'},
+        {t:'09:45 AM',cv:47,aht:392,ag:29,req:25,rec:29,eoi:99.8,a:'Monitor abandon rate'},
+        {t:'10:15 AM',cv:45,aht:390,ag:29,req:24,rec:29,eoi:99.9,a:'VTO eligible if rate drops'}]},
+
+  {id:'nam-rb-svc',
+   name:'NAM CS RB Service Priority', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:78.8, mtdASA:417, mtdOcc:64.2, projEOI:99.6, gap:'high-deficit',
+   rSVL:77.5, rASA:425, rAbnd:5.2, rOcc:65.1,
+   c2h:95.4, aht2h:412, asa2h:420, abnd2h:5.4, occ2h:65.8, acdOU:0, ahtOU:0.0,
+   fcCV:582, fcAHT:417, fcEOI:99.6,  agIn:149,reqFTE:121,recFTE:149,
+   action:'VTO cannot be offered since → MTD SVL (78.80%) falls below target (84.0%). High ASA 417s — severe queue backlog.',
+   ivs:[{t:'08:46 AM',cv:582,aht:417,ag:149,req:121,rec:149,eoi:99.6,a:'VTO blocked — queue backlog'},
+        {t:'09:15 AM',cv:565,aht:415,ag:149,req:118,rec:149,eoi:99.7,a:'VTO blocked'},
+        {t:'09:45 AM',cv:545,aht:413,ag:149,req:114,rec:149,eoi:99.8,a:'VTO blocked — SVL improving'},
+        {t:'10:15 AM',cv:525,aht:410,ag:149,req:110,rec:149,eoi:99.9,a:'Monitor SVL — may become eligible'}]},
+
+  {id:'nam-cau-sp',
+   name:'NAM CS RS CAU Spanish', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:96.8, mtdASA:12,  mtdOcc:41.0, projEOI:99.8, gap:'surplus',
+   rSVL:97.2, rASA:11,  rAbnd:0.0, rOcc:40.2,
+   c2h:4.2,  aht2h:340, asa2h:11,  abnd2h:0.0, occ2h:39.8, acdOU:0, ahtOU:0.0,
+   fcCV:4,   fcAHT:346, fcEOI:99.8,  agIn:11, reqFTE:3,  recFTE:11,
+   action:'Offer VTO/Offline of 6 FTE — significant surplus capacity detected.',
+   ivs:[{t:'08:46 AM',cv:4,aht:346,ag:11,req:3,rec:11,eoi:99.8,a:'Offer VTO/Offline of 6 FTE'},
+        {t:'09:15 AM',cv:4,aht:344,ag:11,req:3,rec:11,eoi:99.8,a:'Offer VTO/Offline of 6 FTE'},
+        {t:'09:45 AM',cv:3,aht:342,ag:11,req:3,rec:11,eoi:99.8,a:'Offer VTO/Offline of 6 FTE'},
+        {t:'10:15 AM',cv:3,aht:340,ag:11,req:2,rec:11,eoi:99.9,a:'Offer VTO/Offline of 6 FTE'}]},
+
+  {id:'thd-assist',
+   name:'Com Specialty Partners THD-Assist Total', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:94.1, mtdASA:9,   mtdOcc:39.5, projEOI:99.8, gap:'surplus',
+   rSVL:95.2, rASA:8,   rAbnd:0.0, rOcc:38.8,
+   c2h:4.1,  aht2h:242, asa2h:8,   abnd2h:0.0, occ2h:38.2, acdOU:0, ahtOU:0.0,
+   fcCV:4,   fcAHT:245, fcEOI:99.8,  agIn:18, reqFTE:3,  recFTE:5,
+   action:'Offer VTO/Offline of 13 FTE — large surplus. Coordinate with floor manager before executing.',
+   ivs:[{t:'08:46 AM',cv:4,aht:245,ag:18,req:3,rec:5,eoi:99.8,a:'Offer VTO/Offline of 13 FTE'},
+        {t:'09:15 AM',cv:4,aht:243,ag:18,req:3,rec:5,eoi:99.8,a:'Offer VTO/Offline of 13 FTE'},
+        {t:'09:45 AM',cv:3,aht:241,ag:18,req:2,rec:5,eoi:99.9,a:'Offer VTO/Offline of 13 FTE'},
+        {t:'10:15 AM',cv:3,aht:239,ag:18,req:2,rec:5,eoi:99.9,a:'Offer VTO/Offline of 13 FTE'}]},
+
+  {id:'crs-supgate',
+   name:'Credit Cons CRS SupGate', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:91.2, mtdASA:6,   mtdOcc:55.0, projEOI:99.8, gap:'neutral',
+   rSVL:92.4, rASA:5,   rAbnd:0.2, rOcc:54.2,
+   c2h:5.2,  aht2h:344, asa2h:5,   abnd2h:0.1, occ2h:53.8, acdOU:0, ahtOU:0.0,
+   fcCV:5,   fcAHT:348, fcEOI:99.8,  agIn:6,  reqFTE:3,  recFTE:5,
+   action:'Assess support needs of BG NAM Credit RS Acquisitions, NAM Credit RS PTD and Credit Brands Costco Sup-CSA. If no additional support required, then offer VTO/Offline of 1 FTE.',
+   ivs:[{t:'08:46 AM',cv:5,aht:348,ag:6,req:3,rec:5,eoi:99.8,a:'Assess support needs — VTO pending'},
+        {t:'09:15 AM',cv:5,aht:346,ag:6,req:3,rec:5,eoi:99.8,a:'Assess support needs — VTO pending'},
+        {t:'09:45 AM',cv:4,aht:344,ag:6,req:2,rec:5,eoi:99.9,a:'Assess — VTO pending'},
+        {t:'10:15 AM',cv:4,aht:342,ag:6,req:2,rec:5,eoi:99.9,a:'Assess — VTO pending'}]},
+
+  {id:'uscb',
+   name:'USCB Client Application Servicing', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:62.4, mtdASA:38,  mtdOcc:55.8, projEOI:99.9, gap:'high-deficit',
+   rSVL:61.8, rASA:40,  rAbnd:3.8, rOcc:56.2,
+   c2h:24.2, aht2h:538, asa2h:39,  abnd2h:3.9, occ2h:56.8, acdOU:0, ahtOU:0.0,
+   fcCV:25,  fcAHT:543, fcEOI:99.9,  agIn:17, reqFTE:11, recFTE:17,
+   action:'VTO cannot be offered since → EOI SVL (0.00%) falls below target (84.0%). Severe performance deficit — escalate immediately.',
+   ivs:[{t:'08:46 AM',cv:25,aht:543,ag:17,req:11,rec:17,eoi:99.9,a:'VTO blocked — EOI at 0%, escalate'},
+        {t:'09:15 AM',cv:24,aht:540,ag:17,req:11,rec:17,eoi:99.9,a:'VTO blocked — escalate'},
+        {t:'09:45 AM',cv:23,aht:538,ag:17,req:10,rec:17,eoi:99.9,a:'VTO blocked — escalate'},
+        {t:'10:15 AM',cv:22,aht:535,ag:17,req:10,rec:17,eoi:99.9,a:'VTO blocked — escalate'}]},
+
+  {id:'credit-ulo',
+   name:'Credit ULO Total', flag:'Non-Contractual', svlTgt:83,
+   mtdSVL:55.7, mtdASA:265, mtdOcc:58.0, projEOI:99.9, gap:'high-deficit',
+   rSVL:54.2, rASA:272, rAbnd:6.8, rOcc:59.1,
+   c2h:10.8, aht2h:262, asa2h:268, abnd2h:6.9, occ2h:59.5, acdOU:0, ahtOU:0.0,
+   fcCV:11,  fcAHT:265, fcEOI:99.9,  agIn:8,  reqFTE:4,  recFTE:8,
+   action:'VTO cannot be offered → MTD SVL (55.70%) falls below target (83.01%). Check minimal offline/inventory – Offshore/KANA Domestic. Push call distribution to Domestic for Best Buy and THD.',
+   ivs:[{t:'08:46 AM',cv:11,aht:265,ag:8,req:4,rec:8,eoi:99.9,a:'VTO blocked — route overflow KANA Domestic'},
+        {t:'09:15 AM',cv:10,aht:263,ag:8,req:4,rec:8,eoi:99.9,a:'VTO blocked — KANA routing'},
+        {t:'09:45 AM',cv:10,aht:261,ag:8,req:4,rec:8,eoi:99.9,a:'VTO blocked — KANA routing'},
+        {t:'10:15 AM',cv:9, aht:259,ag:8,req:3,rec:8,eoi:99.9,a:'VTO blocked — KANA routing'}]},
+
+  {id:'nam-credit-rtd',
+   name:'NAM Credit RS RTD', flag:'Non-Contractual', svlTgt:83,
+   mtdSVL:87.8, mtdASA:564, mtdOcc:61.0, projEOI:100.4, gap:'neutral',
+   rSVL:88.4, rASA:558, rAbnd:2.9, rOcc:60.4,
+   c2h:10.9, aht2h:560, asa2h:561, abnd2h:2.8, occ2h:60.1, acdOU:0, ahtOU:0.0,
+   fcCV:11,  fcAHT:564, fcEOI:100.4, agIn:9,  reqFTE:6,  recFTE:11,
+   action:'VTO cannot be offered → MTD SVL (87.80%) falls below target (83.01%). Check minimal offline/inventory – Offshore/KANA Domestic. Push distribution for Best Buy and THD if available.',
+   ivs:[{t:'08:46 AM',cv:11,aht:564,ag:9,req:6,rec:11,eoi:100.4,a:'VTO blocked — route to KANA'},
+        {t:'09:15 AM',cv:11,aht:562,ag:9,req:6,rec:11,eoi:100.4,a:'VTO blocked'},
+        {t:'09:45 AM',cv:10,aht:560,ag:9,req:5,rec:11,eoi:100.4,a:'VTO blocked — monitor SVL'},
+        {t:'10:15 AM',cv:10,aht:558,ag:9,req:5,rec:11,eoi:100.4,a:'VTO blocked'}]},
+
+  {id:'nam-rb-inet',
+   name:'NAM CS RB Internet Tech', flag:'Non-Contractual', svlTgt:84,
+   mtdSVL:48.3, mtdASA:523, mtdOcc:32.3, projEOI:100.4, gap:'high-deficit',
+   rSVL:46.8, rASA:531, rAbnd:8.2, rOcc:33.1,
+   c2h:7.8,  aht2h:518, asa2h:525, abnd2h:8.5, occ2h:33.5, acdOU:0, ahtOU:0.0,
+   fcCV:8,   fcAHT:523, fcEOI:100.4, agIn:11, reqFTE:4,  recFTE:11,
+   action:'VTO cannot be offered → MTD SVL (48.30%) far below target (84.0%). Critical performance deficit. Escalate immediately.',
+   ivs:[{t:'08:46 AM',cv:8,aht:523,ag:11,req:4,rec:11,eoi:100.4,a:'VTO blocked — critical, escalate'},
+        {t:'09:15 AM',cv:8,aht:521,ag:11,req:4,rec:11,eoi:100.4,a:'VTO blocked — escalate'},
+        {t:'09:45 AM',cv:7,aht:519,ag:11,req:3,rec:11,eoi:100.4,a:'VTO blocked — escalate'},
+        {t:'10:15 AM',cv:7,aht:517,ag:11,req:3,rec:11,eoi:100.4,a:'VTO blocked — escalate'}]},
+];
+
+const FEED = [
+  {gap:'high-deficit', msg:'<b>NAM CS RB Internet Tech</b> — SVL at 48.3%, critical deficit. Escalate immediately.'},
+  {gap:'high-deficit', msg:'<b>Credit ULO Total</b> — Overflow routed to KANA Domestic queue.'},
+  {gap:'surplus',      msg:'<b>THD-Assist Total</b> — 13 FTE VTO eligible. Awaiting floor manager approval.'},
+  {gap:'neutral',      msg:'<b>Citi Cards CitiBusiness</b> — Occupancy at 86.9%, approaching threshold.'},
+  {gap:'surplus',      msg:'<b>NAM CS RS CAU Spanish</b> — 6 FTE VTO offer ready for execution.'},
+  {gap:'high-deficit', msg:'<b>USCB Client Application</b> — EOI SVL at 0.0%. Immediate escalation required.'},
+  {gap:'low-surplus',  msg:'<b>Canada Commercial – Total</b> — 1 FTE VTO offer confirmed and executed.'},
+  {gap:'high-deficit', msg:'<b>NAM CS RB Service Priority</b> — ASA at 417s. Queue backlog detected.'},
+];
+
+/* ── SPARKLINE ───────────────────────────────────────────────────── */
+function buildSpark(g){
+  const W=100, H=22, pts=14, sv=g.mtdSVL;
+  const data=[];
+  let v=sv;
+  for(let i=0;i<pts;i++){
+    const n=(Math.sin(sv*i*.8+i)*3.5+Math.cos(sv*i*.3)*2);
+    v=Math.max(20,Math.min(100,v+n));
+    data.push(v);
+  }
+  data[pts-1]=sv;
+  const mn=Math.min(...data), mx=Math.max(...data), rng=mx-mn||1;
+  const pts2d=data.map((d,i)=>`${(i/(pts-1))*W},${H-((d-mn)/rng)*H}`).join(' ');
+  const fill=data.map((d,i)=>`${(i/(pts-1))*W},${H-((d-mn)/rng)*H}`).join(' ')+` ${W},${H} 0,${H}`;
+  const c=G[g.gap].color;
+  return `<svg class="ssvg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+    <polygon points="${fill}" fill="${c}" opacity=".1"/>
+    <polyline points="${pts2d}" fill="none" stroke="${c}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+/* ── CLOCK ───────────────────────────────────────────────────────── */
+function initClock(){
+  const el=document.getElementById('clock');
+  const t=()=>{el.textContent=new Date().toLocaleTimeString('en-US',{hour12:false})+' CST';};
+  t(); setInterval(t,1000);
+}
+
+/* ── HERO ANIMATIONS ─────────────────────────────────────────────── */
+function initHero(){
+  const svl=85.2, occ=61.8;
+  setTimeout(()=>{
+    const rs=document.getElementById('rSVL'), ro=document.getElementById('rOcc'), gn=document.getElementById('gnum');
+    rs.style.transition='stroke-dashoffset 1.6s cubic-bezier(.2,.8,.2,1)';
+    ro.style.transition='stroke-dashoffset 1.6s cubic-bezier(.2,.8,.2,1)';
+    rs.style.strokeDashoffset=528-528*(svl/100);
+    ro.style.strokeDashoffset=415-415*(occ/100);
+    const s=performance.now();
+    (function step(t){
+      const p=Math.min(1,(t-s)/1500);
+      gn.textContent=(svl*(1-Math.pow(1-p,3))).toFixed(1)+'%';
+      if(p<1)requestAnimationFrame(step);
+    })(s);
+  },200);
+  document.querySelectorAll('.kn[data-t]').forEach(el=>{
+    const tgt=parseInt(el.dataset.t), s=performance.now();
+    (function step(t){
+      const p=Math.min(1,(t-s)/1200);
+      el.textContent=Math.floor(tgt*(1-Math.pow(1-p,3))).toLocaleString();
+      if(p<1)requestAnimationFrame(step);
+    })(s);
+  });
+}
+
+/* ── FEED ────────────────────────────────────────────────────────── */
+function initFeed(){
+  document.getElementById('feed').innerHTML=FEED.map(f=>{
+    const m=G[f.gap];
+    const ts=new Date(Date.now()-Math.random()*1800000).toLocaleTimeString('en-US',{hour12:false});
+    return `<div class="frow">
+      <span class="frt">${ts}</span>
+      <span class="frb" style="background:${m.color};box-shadow:0 0 5px ${m.color}"></span>
+      <span class="frm">${f.msg}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── CARDS ───────────────────────────────────────────────────────── */
+let afilt='all', srch='';
+function renderCards(){
+  const grid=document.getElementById('cgrid');
+  const rows=GROUPS.filter(g=>(afilt==='all'||g.gap===afilt)&&(!srch||g.name.toLowerCase().includes(srch.toLowerCase())));
+  if(!rows.length){
+    grid.innerHTML='<div style="grid-column:1/-1;padding:48px;text-align:center;font-family:var(--mono);color:var(--faint);">No report groups match your filter.</div>';
+    return;
+  }
+  const circ=2*Math.PI*30;
+  grid.innerHTML=rows.map((g,i)=>{
+    const m=G[g.gap], off=circ-circ*(g.mtdSVL/100);
+    return `<div class="card" style="--ce:${m.edge};animation-delay:${(i*.035).toFixed(2)}s" onclick="openD('${g.id}')">
+      <div class="ctop">
+        <div><div class="cname">${g.name}</div><div class="cflag">${g.flag}</div></div>
+        <span class="gbadge" style="color:${m.color};background:${m.dim}">${m.label}</span>
+      </div>
+      <div class="cspark">${buildSpark(g)}</div>
+      <div class="cmid">
+        <div class="crw">
+          <svg width="66" height="66" viewBox="0 0 66 66">
+            <circle cx="33" cy="33" r="30" fill="none" stroke="rgba(130,160,210,.09)" stroke-width="6"/>
+            <circle cx="33" cy="33" r="30" fill="none" stroke="${m.color}" stroke-width="6"
+              stroke-linecap="round" stroke-dasharray="${circ.toFixed(1)}" stroke-dashoffset="${off.toFixed(1)}"/>
+          </svg>
+          <div class="crv"><span class="rn" style="color:${m.color}">${g.mtdSVL.toFixed(1)}%</span><span class="rl">MTD SVL</span></div>
+        </div>
+        <div class="mlist">
+          <div class="mrow"><span class="mk">MTD ASA</span><span class="mv">${g.mtdASA}s</span></div>
+          <div class="mrow"><span class="mk">SVL Target</span><span class="mv">${g.svlTgt}%</span></div>
+          <div class="occrow">
+            <div class="occhd"><span class="mk">Occupancy</span><span class="mv">${g.mtdOcc.toFixed(1)}%</span></div>
+            <div class="occbar"><div class="occfill" style="width:${Math.min(g.mtdOcc,100)}%;background:${m.color}"></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="cfoot">
+        <div class="ebl"><div class="el">Proj. EOI SVL</div><div class="ev" style="color:${m.color}">${g.projEOI.toFixed(1)}%</div></div>
+        <div class="fbl" style="background:${m.dim};color:${m.color}">${g.recFTE-g.reqFTE>0?'+' +(g.recFTE-g.reqFTE)+' FTE buffer':g.reqFTE-g.recFTE>0?'−'+(g.reqFTE-g.recFTE)+' FTE gap':'FTE balanced'}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/* ── ACTION PLAN TABLE ───────────────────────────────────────────── */
+function renderAPT(){
+  const ord={'high-deficit':0,'neutral':1,'low-surplus':2,'surplus':3,'high-surplus':4};
+  const sorted=[...GROUPS].sort((a,b)=>ord[a.gap]-ord[b.gap]);
+  document.getElementById('aptb').innerHTML=sorted.map(g=>{
+    const m=G[g.gap];
+    return `<tr onclick="openD('${g.id}')">
+      <td class="rg"><span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:${m.color};box-shadow:0 0 5px ${m.color};margin-right:8px;vertical-align:middle"></span>${g.name}</td>
+      <td class="mn">${g.fcCV.toLocaleString()}</td>
+      <td class="mn">${g.fcAHT.toLocaleString()}</td>
+      <td class="mn">${g.agIn}</td>
+      <td class="mn">${g.reqFTE}</td>
+      <td class="mn">${g.recFTE}</td>
+      <td class="mn">${g.acdOU}</td>
+      <td class="mn">${g.ahtOU.toFixed(1)}</td>
+      <td class="mn" style="color:${m.color};font-weight:600">${g.fcEOI.toFixed(1)}%</td>
+      <td><span class="gbadge" style="color:${m.color};background:${m.dim}">${m.label}</span></td>
+      <td class="ac">${g.action.length>85?g.action.slice(0,85)+'…':g.action}</td>
+      <td><button class="ebtn" onclick="event.stopPropagation();openD('${g.id}')">Detail →</button></td>
+    </tr>`;
+  }).join('');
+}
+
+/* ── DETAIL PANEL ────────────────────────────────────────────────── */
+function openD(id){
+  const g=GROUPS.find(x=>x.id===id);
+  if(!g)return;
+  const m=G[g.gap];
+  document.getElementById('dptit').textContent=g.name;
+  document.getElementById('dpsub').textContent=g.flag+' · Decision Interval 08:30 CST · Actuals till 07:30 CST';
+  document.getElementById('dpb').innerHTML=`
+    <div class="dp-sec">
+      <div class="dp-sl">Recommended Action</div>
+      <div class="dp-act">${g.action}</div>
+      <div class="dp-gr"><span class="dp-gl">Gap Category:</span>
+        <span class="dp-gb" style="color:${m.color};background:${m.dim}">${m.label}</span></div>
+    </div>
+
+    <div class="dp-sec">
+      <div class="dp-sl">Running Actuals — till 07:30 CST</div>
+      <div class="dpg">
+        <div class="dpm"><div class="dl">MTD SVL</div><div class="dv" style="color:${m.color}">${g.mtdSVL.toFixed(1)}%</div><div class="ds">Goal: ${g.svlTgt}%</div></div>
+        <div class="dpm"><div class="dl">Running SVL</div><div class="dv">${g.rSVL.toFixed(1)}%</div></div>
+        <div class="dpm"><div class="dl">Running ASA (sec)</div><div class="dv">${g.rASA}</div><div class="ds">Goal: 60s</div></div>
+        <div class="dpm"><div class="dl">Running Abandon Rate</div><div class="dv" style="${g.rAbnd>2?'color:var(--rose)':''}">${g.rAbnd.toFixed(1)}%</div><div class="ds">Goal: &lt;2%</div></div>
+        <div class="dpm"><div class="dl">Running Occupancy</div><div class="dv" style="${g.rOcc>87?'color:var(--amber)':''}">${g.rOcc.toFixed(1)}%</div><div class="ds">Range: 0.93–0.37</div></div>
+        <div class="dpm" style="opacity:.45"><div class="dl">MTD Occupancy</div><div class="dv">${g.mtdOcc.toFixed(1)}%</div></div>
+      </div>
+    </div>
+
+    <div class="dp-sec">
+      <div class="dp-sl">Actuals Avg — Last 2 Hours as of 07:30 CST</div>
+      <div class="dpg dpg4">
+        <div class="dpm"><div class="dl">Calls Offered</div><div class="dv">${g.c2h.toFixed(1)}</div></div>
+        <div class="dpm"><div class="dl">AHT (sec)</div><div class="dv">${g.aht2h}</div></div>
+        <div class="dpm"><div class="dl">ASA (sec)</div><div class="dv">${g.asa2h}</div></div>
+        <div class="dpm"><div class="dl">Abandoned Rate</div><div class="dv" style="${g.abnd2h>2?'color:var(--rose)':''}">${g.abnd2h.toFixed(1)}%</div></div>
+        <div class="dpm"><div class="dl">Occupancy</div><div class="dv">${g.occ2h.toFixed(1)}%</div></div>
+        <div class="dpm"><div class="dl">ACD Offered O/U</div><div class="dv">${g.acdOU}</div></div>
+        <div class="dpm" style="grid-column:span 2"><div class="dl">AHT O/U</div><div class="dv">${g.ahtOU.toFixed(1)}</div></div>
+      </div>
+    </div>
+
+    <div class="dp-sec">
+      <div class="dp-sl">Decision Drivers — Projection Next 2 Hrs from 08:44 AM CST</div>
+      <div class="dpg">
+        <div class="dpm"><div class="dl">Forecasted Call Volume</div><div class="dv">${g.fcCV.toLocaleString()}</div></div>
+        <div class="dpm"><div class="dl">Forecasted AHT (sec)</div><div class="dv">${g.fcAHT}</div></div>
+        <div class="dpm"><div class="dl">Proj. EOI SVL</div><div class="dv" style="color:${m.color}">${g.fcEOI.toFixed(1)}%</div><div class="ds">Start of day till next 2 hrs</div></div>
+        <div class="dpm"><div class="dl">Agents Logged In</div><div class="dv">${g.agIn}</div><div class="ds">Real-time from Avaya</div></div>
+        <div class="dpm"><div class="dl">Required FTE</div><div class="dv">${g.reqFTE}</div><div class="ds">Erlang C derived</div></div>
+        <div class="dpm"><div class="dl">Recommended FTE</div><div class="dv" style="color:${m.color}">${g.recFTE}</div><div class="ds">Model output</div></div>
+      </div>
+    </div>
+
+    <div class="dp-sec">
+      <div class="dp-sl">Interval Action Plan Summary — Next 4 Intervals</div>
+      <table class="mtb">
+        <thead><tr>
+          <th>Interval</th><th>FC CV</th><th>FC AHT</th><th>Agents</th>
+          <th>Req FTE</th><th>Rec FTE</th><th>EOI SVL</th><th>Action</th>
+        </tr></thead>
+        <tbody>${g.ivs.map(r=>`<tr>
+          <td class="mti">${r.t}</td>
+          <td>${r.cv.toLocaleString()}</td><td>${r.aht}</td><td>${r.ag}</td>
+          <td>${r.req}</td><td>${r.rec}</td>
+          <td style="color:${m.color};font-weight:600">${r.eoi.toFixed(1)}%</td>
+          <td class="mta">${r.a}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>`;
+  document.getElementById('ovl').classList.add('on');
+  document.getElementById('dp').classList.add('open');
+}
+function closeD(){
+  document.getElementById('ovl').classList.remove('on');
+  document.getElementById('dp').classList.remove('open');
+}
+
+/* ── INIT ────────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded',()=>{
+  initClock();
+  initHero();
+  initFeed();
+  renderCards();
+  renderAPT();
+
+  document.getElementById('chips').addEventListener('click',e=>{
+    const c=e.target.closest('[data-f]');
+    if(!c)return;
+    document.querySelectorAll('.chip').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+    afilt=c.dataset.f;
+    renderCards();
+  });
+  document.getElementById('search').addEventListener('input',e=>{srch=e.target.value;renderCards();});
+  document.addEventListener('keydown',e=>{if(e.key==='Escape')closeD();});
+});
+</script>
+</body>
+</html>
